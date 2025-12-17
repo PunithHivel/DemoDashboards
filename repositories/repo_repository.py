@@ -110,6 +110,10 @@ class RepoRepository:
             slug = name.replace("_", "-")
             httpurl = f"https://dummy.repo/{unique_suffix}"
 
+            exclusion_history = template.get("exclusion_history")
+            if not exclusion_history:
+                exclusion_history = "[]"
+
             params = {
                 "name": name,
                 "slug": slug,
@@ -142,7 +146,7 @@ class RepoRepository:
                 "codereview_enabled_on": template.get("codereview_enabled_on"),
                 "last_excluded_on": template.get("last_excluded_on"),
                 "excluded_reason": template.get("excluded_reason"),
-                "exclusion_history": template.get("exclusion_history"),
+                "exclusion_history": exclusion_history,
             }
 
             result = session.execute(REPO_INSERT_SQL, params)
