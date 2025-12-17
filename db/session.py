@@ -20,8 +20,8 @@ def _manual_load_dotenv() -> None:
         key, _, value = cleaned.partition("=")
         key = key.strip()
         value = value.strip()
-        if key and key not in os.environ:
-            os.environ[key] = value
+        if key:
+            os.environ[key] = value  # Always set/override from .env file
 
 
 _manual_load_dotenv()
