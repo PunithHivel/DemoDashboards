@@ -1,0 +1,14 @@
+[project]
+name = "demodashboards"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.124.4",
+    "pandas>=2.3.3",
+    "psycopg2-binary>=2.9.11",
+    "python-multipart>=0.0.20",
+    "sqlalchemy>=2.0.45",
+    "uvicorn>=0.38.0",
+]
