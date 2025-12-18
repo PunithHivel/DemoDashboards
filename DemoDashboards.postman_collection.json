@@ -1,0 +1,172 @@
+{
+  "info": {
+    "name": "DemoDashboards API",
+    "_postman_id": "00000000-0000-0000-0000-000000000000",
+    "description": "Sample requests for DemoDashboards backend routers.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health - Database",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health/database",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health",
+            "database"
+          ]
+        },
+        "description": "Checks connectivity to the database."
+      }
+    },
+    {
+      "name": "Workspace - Create Dummy Workspace",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/workspace/workspace",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "workspace",
+            "workspace"
+          ]
+        },
+        "description": "Creates a placeholder workspace named 'testing'."
+      }
+    },
+    {
+      "name": "Repo - Seed Dummy Repositories",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"workspace_id\": 7172,\n  \"count\": 5\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/repo",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "repo"
+          ]
+        },
+        "description": "Seeds dummy repositories for the specified workspace ID."
+      }
+    },
+    {
+      "name": "Author Import - Upload CSV",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "organization_id",
+              "value": "2159",
+              "type": "text",
+              "description": "Organization that the uploaded authors belong to."
+            },
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/authors.csv",
+              "description": "CSV file containing author rows."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/author-import/csv",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "author-import",
+            "csv"
+          ]
+        },
+        "description": "Uploads an author CSV via multipart form data. The `file` part must be a CSV."
+      }
+    },
+    {
+      "name": "Commit Import - Upload CSV",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/commits.csv",
+              "description": "CSV containing commit records."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/commit/csv",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "commit",
+            "csv"
+          ]
+        },
+        "description": "Uploads commits via CSV (multipart form data with `file`)."
+      }
+    },
+    {
+      "name": "Pull Request Import - Upload CSV",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/pull_requests.csv",
+              "description": "CSV containing pull request rows."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/pull-request-import/csv",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "pull-request-import",
+            "csv"
+          ]
+        },
+        "description": "Uploads pull requests via CSV (multipart form data with `file`)."
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ]
+}

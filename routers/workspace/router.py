@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.workspace_repository import WorkspaceRepository
+from schemas.workspace import WorkspaceResponse
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 _repository = WorkspaceRepository()
@@ -12,7 +13,10 @@ _repository = WorkspaceRepository()
     "/workspace",
     status_code=status.HTTP_201_CREATED,
     summary="Create a dummy workspace with name/slug set to 'testing'",
+    response_model=WorkspaceResponse,
 )
-def create_dummy_workspace(session: Session = Depends(get_db_session)):
+def create_dummy_workspace(
+    session: Session = Depends(get_db_session),
+) -> WorkspaceResponse:
     workspace_id = _repository.create_dummy_workspace(session)
-    return {"workspace_id": workspace_id, "name": "testing", "slug": "testing"}
+    return WorkspaceResponse(workspace_id=workspace_id, name="testing", slug="testing")

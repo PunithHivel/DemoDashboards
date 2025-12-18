@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -10,97 +9,19 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.commit_repository import COMMIT_COLUMNS, CommitRepository
+from schemas.commit import (
+    BOOL_FIELDS,
+    DATETIME_FIELDS,
+    DEFAULT_COMMIT_VALUES,
+    INT_FIELDS,
+    REQUIRED_FIELDS,
+    CommitImportResponse,
+)
+from utils.csv_loader import read_uploaded_csv
+from utils.parsers import coerce_bool, coerce_datetime, coerce_int, sanitize_value
 
 router = APIRouter(prefix="/commit", tags=["commit"])
 _repository = CommitRepository()
-
-REQUIRED_FIELDS = {
-    "hash",
-    "authorid",
-    "commitid",
-    "repoid",
-    "repositoryfullname",
-    "workspaceid",
-    "organizationid",
-}
-INT_FIELDS = {
-    "authorid",
-    "repoid",
-    "rework",
-    "newwork",
-    "maintenance",
-    "assistance",
-    "linesadded",
-    "linesremoved",
-    "originalauthorid",
-    "workspaceid",
-    "userintegrationid",
-    "estimated_storypoints",
-}
-BOOL_FIELDS = {
-    "skippedregexfiles",
-    "missingcommit",
-    "processed",
-    "skipfromcalculation",
-    "jiramappingprocessed",
-    "jiradatacollected",
-    "is_auto_excluded",
-}
-DATETIME_FIELDS = {"date", "createddate", "modifieddate"}
-DEFAULTS = {
-    "skippedregexfiles": False,
-    "missingcommit": False,
-    "linesadded": 0,
-    "linesremoved": 0,
-    "processed": False,
-    "skipfromcalculation": False,
-    "jiramappingprocessed": False,
-    "jiradatacollected": False,
-    "is_auto_excluded": False,
-}
-
-
-def _normalize_value(value: Any):
-    if pd.isna(value):
-        return None
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
-    return value
-
-
-def _parse_int(value: Any):
-    if value is None:
-        return None
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        raise ValueError("invalid integer")
-
-
-def _parse_bool(value: Any):
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    lowered = str(value).strip().lower()
-    if not lowered:
-        return None
-    return lowered in {"true", "1", "yes", "y"}
-
-
-def _parse_datetime(value: Any):
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value
-    text_value = str(value).strip()
-    if not text_value:
-        return None
-    try:
-        return pd.to_datetime(text_value).to_pydatetime()
-    except Exception:
-        raise ValueError("invalid datetime")
 
 
 def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
@@ -118,14 +39,16 @@ def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
         try:
             row: Dict[str, Any] = {}
             for column in COMMIT_COLUMNS:
-                raw_value = _normalize_value(record.get(column, DEFAULTS.get(column)))
+                raw_value = sanitize_value(
+                    record.get(column, DEFAULT_COMMIT_VALUES.get(column))
+                )
 
                 if column in INT_FIELDS and raw_value is not None:
-                    raw_value = _parse_int(raw_value)
+                    raw_value = coerce_int(raw_value, strict=True)
                 elif column in BOOL_FIELDS and raw_value is not None:
-                    raw_value = _parse_bool(raw_value)
+                    raw_value = coerce_bool(raw_value)
                 elif column in DATETIME_FIELDS and raw_value is not None:
-                    raw_value = _parse_datetime(raw_value)
+                    raw_value = coerce_datetime(raw_value, strict=True)
 
                 row[column] = raw_value
 
@@ -148,31 +71,13 @@ def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
     "/csv",
     status_code=status.HTTP_201_CREATED,
     summary="Import commits from a CSV file",
+    response_model=CommitImportResponse,
 )
 async def import_commits_from_csv(
     file: UploadFile = File(...),
     session: Session = Depends(get_db_session),
-):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only CSV uploads are supported.",
-        )
-
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Empty file uploaded.",
-        )
-
-    try:
-        df = pd.read_csv(io.BytesIO(contents))
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to parse CSV: {exc}",
-        ) from exc
+) -> CommitImportResponse:
+    df = await read_uploaded_csv(file)
 
     rows = _prepare_rows(df)
     if not rows:
@@ -182,9 +87,9 @@ async def import_commits_from_csv(
         )
 
     inserted = _repository.bulk_insert(session, rows)
-    return {
-        "rows_received": len(df),
-        "rows_inserted": len(inserted),
-        "rows_skipped": len(df) - len(inserted),
-        "commits": inserted,
-    }
+    return CommitImportResponse(
+        rows_received=len(df),
+        rows_inserted=len(inserted),
+        rows_skipped=len(df) - len(inserted),
+        commits=inserted,
+    )

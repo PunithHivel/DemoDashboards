@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import json
 from typing import Dict, List, Tuple
 
@@ -10,22 +9,15 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.author_repository import AuthorRepository
+from schemas.author_import import (
+    CSV_TO_DB_FIELDS,
+    REQUIRED_NON_NULL,
+    AuthorImportRequest,
+    AuthorImportResponse,
+)
+from utils.csv_loader import read_uploaded_csv
 
 router = APIRouter(prefix="/author-import", tags=["author-import"])
-ORG_ID = 2159
-CSV_TO_DB_FIELDS = {
-    "unique_ic": "accountid",
-    "name": "name",
-    "email": "email",
-    "labels": "labels",
-    "username": "username",
-    "login_via": "type",
-    "user_role": "access_status",
-    "teams": "sharedteams",
-    "scm_provider": "scmprovider",
-    "id": "id",
-}
-REQUIRED_NON_NULL = {"id", "scm_provider", "name", "username", "login_via"}
 _repository = AuthorRepository()
 
 
@@ -98,6 +90,7 @@ def _normalize_shared_teams(raw_value) -> str | None:
 
 def _prepare_author_payloads(
     df: pd.DataFrame,
+    organization_id: int,
 ) -> Tuple[List[Dict], int, int]:
     df = _normalize_columns(df)
     missing_columns = [col for col in CSV_TO_DB_FIELDS if col not in df.columns]
@@ -132,7 +125,7 @@ def _prepare_author_payloads(
 
             author_payload = {
                 "id": int(row.id),
-                "organizationid": ORG_ID,
+                "organizationid": organization_id,
                 "accountid": account_id,
                 "name": str(row.name).strip(),
                 "email": None if pd.isna(row.email) else str(row.email).strip(),
@@ -158,33 +151,18 @@ def _prepare_author_payloads(
     "/csv",
     status_code=status.HTTP_201_CREATED,
     summary="Import authors for a fixed organization from a CSV file",
+    response_model=AuthorImportResponse,
 )
 async def import_authors_from_csv(
+    request: AuthorImportRequest = Depends(AuthorImportRequest.as_form),
     file: UploadFile = File(...),
     session: Session = Depends(get_db_session),
-):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only CSV uploads are supported.",
-        )
+) -> AuthorImportResponse:
+    df = await read_uploaded_csv(file)
 
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Empty file uploaded.",
-        )
-
-    try:
-        df = pd.read_csv(io.BytesIO(contents))
-    except Exception as exc:  # pragma: no cover - pandas error surface
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to parse CSV: {exc}",
-        ) from exc
-
-    author_payloads, dropped_prior, conversion_errors = _prepare_author_payloads(df)
+    author_payloads, dropped_prior, conversion_errors = _prepare_author_payloads(
+        df, request.organization_id
+    )
     if not author_payloads:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -193,9 +171,9 @@ async def import_authors_from_csv(
 
     inserted = _repository.bulk_upsert(session, author_payloads)
 
-    return {
-        "rows_received": len(df),
-        "rows_inserted": inserted,
-        "rows_skipped": dropped_prior + conversion_errors,
-        "organization_id": ORG_ID,
-    }
+    return AuthorImportResponse(
+        rows_received=len(df),
+        rows_inserted=inserted,
+        rows_skipped=dropped_prior + conversion_errors,
+        organization_id=request.organization_id,
+    )
