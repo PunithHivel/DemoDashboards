@@ -9,24 +9,15 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.author_repository import AuthorRepository
-from schemas.author_import import AuthorImportResponse
+from schemas.author_import import (
+    CSV_TO_DB_FIELDS,
+    ORG_ID,
+    REQUIRED_NON_NULL,
+    AuthorImportResponse,
+)
 from utils.csv_loader import read_uploaded_csv
 
 router = APIRouter(prefix="/author-import", tags=["author-import"])
-ORG_ID = 2159
-CSV_TO_DB_FIELDS = {
-    "unique_ic": "accountid",
-    "name": "name",
-    "email": "email",
-    "labels": "labels",
-    "username": "username",
-    "login_via": "type",
-    "user_role": "access_status",
-    "teams": "sharedteams",
-    "scm_provider": "scmprovider",
-    "id": "id",
-}
-REQUIRED_NON_NULL = {"id", "scm_provider", "name", "username", "login_via"}
 _repository = AuthorRepository()
 
 

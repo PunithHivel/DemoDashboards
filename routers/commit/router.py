@@ -9,57 +9,19 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.commit_repository import COMMIT_COLUMNS, CommitRepository
-from schemas.commit import CommitImportResponse
+from schemas.commit import (
+    BOOL_FIELDS,
+    DATETIME_FIELDS,
+    DEFAULT_COMMIT_VALUES,
+    INT_FIELDS,
+    REQUIRED_FIELDS,
+    CommitImportResponse,
+)
 from utils.csv_loader import read_uploaded_csv
 from utils.parsers import coerce_bool, coerce_datetime, coerce_int, sanitize_value
 
 router = APIRouter(prefix="/commit", tags=["commit"])
 _repository = CommitRepository()
-
-REQUIRED_FIELDS = {
-    "hash",
-    "authorid",
-    "commitid",
-    "repoid",
-    "repositoryfullname",
-    "workspaceid",
-    "organizationid",
-}
-INT_FIELDS = {
-    "authorid",
-    "repoid",
-    "rework",
-    "newwork",
-    "maintenance",
-    "assistance",
-    "linesadded",
-    "linesremoved",
-    "originalauthorid",
-    "workspaceid",
-    "userintegrationid",
-    "estimated_storypoints",
-}
-BOOL_FIELDS = {
-    "skippedregexfiles",
-    "missingcommit",
-    "processed",
-    "skipfromcalculation",
-    "jiramappingprocessed",
-    "jiradatacollected",
-    "is_auto_excluded",
-}
-DATETIME_FIELDS = {"date", "createddate", "modifieddate"}
-DEFAULTS = {
-    "skippedregexfiles": False,
-    "missingcommit": False,
-    "linesadded": 0,
-    "linesremoved": 0,
-    "processed": False,
-    "skipfromcalculation": False,
-    "jiramappingprocessed": False,
-    "jiradatacollected": False,
-    "is_auto_excluded": False,
-}
 
 
 def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
@@ -77,7 +39,9 @@ def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
         try:
             row: Dict[str, Any] = {}
             for column in COMMIT_COLUMNS:
-                raw_value = sanitize_value(record.get(column, DEFAULTS.get(column)))
+                raw_value = sanitize_value(
+                    record.get(column, DEFAULT_COMMIT_VALUES.get(column))
+                )
 
                 if column in INT_FIELDS and raw_value is not None:
                     raw_value = coerce_int(raw_value, strict=True)
