@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.pull_request_repository import PullRequestRepository
-from schemas.pull_request_import import PullRequestImportResponse
+from schemas.pull_request_import import (
+    BOOL_COLUMNS,
+    EXPECTED_COLUMNS,
+    FLOAT_COLUMNS,
+    INT_COLUMNS,
+    PullRequestImportResponse,
+    REQUIRED_COLUMNS,
+    TIMESTAMP_COLUMNS,
+)
 from utils.csv_loader import read_uploaded_csv
 from utils.parsers import (
     clean_text,
@@ -19,132 +27,6 @@ from utils.parsers import (
 )
 
 router = APIRouter(prefix="/pull-request-import", tags=["pull-request-import"])
-
-EXPECTED_COLUMNS = [
-    "id",
-    "actualpullrequestid",
-    "title",
-    "authorid",
-    "createdon",
-    "description",
-    "destinationbranch",
-    "sourcebranch",
-    "firstcommitid",
-    "sourcecommitid",
-    "destinationcommitid",
-    "state",
-    "repoid",
-    "linesadded",
-    "linesremoved",
-    "htmllink",
-    "commentcount",
-    "commitscount",
-    "modifiedfilescount",
-    "updatedon",
-    "mergecommit",
-    "mergedby",
-    "approvedby",
-    "mergedon",
-    "declinedon",
-    "approvedon",
-    "firstcommittedon",
-    "committoopenduration",
-    "opentoreviewduration",
-    "reviewedtoapprovedduration",
-    "reviewedtomergedduration",
-    "approvedtomergedduration",
-    "reviewedtodeclineduration",
-    "opentodeclineduration",
-    "opentomergedduration",
-    "cycletimeduration",
-    "deploytimeduration",
-    "cycletimeoverflow",
-    "declinedby",
-    "remark",
-    "originalauthorid",
-    "originalapprovedby",
-    "originalfirstreviewedby",
-    "originaldeclinedby",
-    "processed",
-    "hotfixpr",
-    "reviewbranchpr",
-    "releasebranchpr",
-    "excludepr",
-    "flashyreviewedpr",
-    "organizationid",
-    "workspaceid",
-    "userintegrationid",
-    "reviewcyclecount",
-    "opentofirstcommentduration",
-    "firstcommenttoapproved",
-]
-
-REQUIRED_COLUMNS = {
-    "id",
-    "actualpullrequestid",
-    "authorid",
-    "createdon",
-    "repoid",
-    "organizationid",
-    "workspaceid",
-}
-
-TIMESTAMP_COLUMNS = {
-    "createdon",
-    "updatedon",
-    "mergedon",
-    "declinedon",
-    "approvedon",
-    "firstcommittedon",
-}
-
-FLOAT_COLUMNS = {
-    "committoopenduration",
-    "opentoreviewduration",
-    "reviewedtoapprovedduration",
-    "reviewedtomergedduration",
-    "approvedtomergedduration",
-    "reviewedtodeclineduration",
-    "opentodeclineduration",
-    "opentomergedduration",
-    "cycletimeduration",
-    "deploytimeduration",
-    "opentofirstcommentduration",
-    "firstcommenttoapproved",
-}
-
-INT_COLUMNS = {
-    "id",
-    "actualpullrequestid",
-    "authorid",
-    "repoid",
-    "linesadded",
-    "linesremoved",
-    "commentcount",
-    "commitscount",
-    "modifiedfilescount",
-    "mergedby",
-    "approvedby",
-    "declinedby",
-    "originalauthorid",
-    "originalapprovedby",
-    "originalfirstreviewedby",
-    "originaldeclinedby",
-    "organizationid",
-    "workspaceid",
-    "userintegrationid",
-    "reviewcyclecount",
-}
-
-BOOL_COLUMNS = {
-    "cycletimeoverflow",
-    "processed",
-    "hotfixpr",
-    "reviewbranchpr",
-    "releasebranchpr",
-    "excludepr",
-    "flashyreviewedpr",
-}
 
 _repository = PullRequestRepository()
 
