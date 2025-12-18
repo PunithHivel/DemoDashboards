@@ -11,8 +11,8 @@ from db.session import get_db_session
 from repositories.author_repository import AuthorRepository
 from schemas.author_import import (
     CSV_TO_DB_FIELDS,
-    ORG_ID,
     REQUIRED_NON_NULL,
+    AuthorImportRequest,
     AuthorImportResponse,
 )
 from utils.csv_loader import read_uploaded_csv
@@ -90,6 +90,7 @@ def _normalize_shared_teams(raw_value) -> str | None:
 
 def _prepare_author_payloads(
     df: pd.DataFrame,
+    organization_id: int,
 ) -> Tuple[List[Dict], int, int]:
     df = _normalize_columns(df)
     missing_columns = [col for col in CSV_TO_DB_FIELDS if col not in df.columns]
@@ -124,7 +125,7 @@ def _prepare_author_payloads(
 
             author_payload = {
                 "id": int(row.id),
-                "organizationid": ORG_ID,
+                "organizationid": organization_id,
                 "accountid": account_id,
                 "name": str(row.name).strip(),
                 "email": None if pd.isna(row.email) else str(row.email).strip(),
@@ -153,12 +154,15 @@ def _prepare_author_payloads(
     response_model=AuthorImportResponse,
 )
 async def import_authors_from_csv(
+    request: AuthorImportRequest = Depends(AuthorImportRequest.as_form),
     file: UploadFile = File(...),
     session: Session = Depends(get_db_session),
 ) -> AuthorImportResponse:
     df = await read_uploaded_csv(file)
 
-    author_payloads, dropped_prior, conversion_errors = _prepare_author_payloads(df)
+    author_payloads, dropped_prior, conversion_errors = _prepare_author_payloads(
+        df, request.organization_id
+    )
     if not author_payloads:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -171,5 +175,5 @@ async def import_authors_from_csv(
         rows_received=len(df),
         rows_inserted=inserted,
         rows_skipped=dropped_prior + conversion_errors,
-        organization_id=ORG_ID,
+        organization_id=request.organization_id,
     )
