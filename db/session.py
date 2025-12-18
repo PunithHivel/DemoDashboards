@@ -3,28 +3,13 @@ from pathlib import Path
 from typing import Generator
 from urllib.parse import quote_plus
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
-
-def _manual_load_dotenv() -> None:
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-    if not env_path.exists():
-        return
-
-    for line in env_path.read_text().splitlines():
-        cleaned = line.strip()
-        if not cleaned or cleaned.startswith("#") or "=" not in cleaned:
-            continue
-        key, _, value = cleaned.partition("=")
-        key = key.strip()
-        value = value.strip()
-        if key:
-            os.environ[key] = value  # Always set/override from .env file
-
-
-_manual_load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 
 def _build_database_url() -> str:
@@ -45,9 +30,14 @@ def _build_database_url() -> str:
             f"{host}:{port}/{database_name}"
         )
 
-    return os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg2://postgres:postgres@localhost:5432/insightly",
+    env_database_url = os.getenv("DATABASE_URL")
+
+    if env_database_url:
+        return env_database_url
+
+    raise RuntimeError(
+        "DATABASE_URL is not configured. Set username/password/engine/host "
+        "or define DATABASE_URL in the environment."
     )
 
 

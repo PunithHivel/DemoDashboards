@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 from typing import Dict, List, Tuple
 
 import pandas as pd
@@ -9,6 +8,15 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.pull_request_repository import PullRequestRepository
+from schemas.pull_request_import import PullRequestImportResponse
+from utils.csv_loader import read_uploaded_csv
+from utils.parsers import (
+    clean_text,
+    coerce_bool,
+    coerce_datetime,
+    coerce_float,
+    coerce_int,
+)
 
 router = APIRouter(prefix="/pull-request-import", tags=["pull-request-import"])
 
@@ -156,54 +164,6 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=normalized)
 
 
-def _to_datetime(value):
-    if pd.isna(value):
-        return None
-    text_value = str(value).strip()
-    if not text_value:
-        return None
-    try:
-        return pd.to_datetime(text_value).to_pydatetime()
-    except Exception:
-        return None
-
-
-def _to_int(value):
-    if pd.isna(value):
-        return None
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_float(value):
-    if pd.isna(value):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_bool(value):
-    if pd.isna(value):
-        return None
-    if isinstance(value, bool):
-        return value
-    text_value = str(value).strip().lower()
-    if not text_value:
-        return None
-    return text_value in {"1", "true", "yes", "y"}
-
-
-def _clean_string(value):
-    if pd.isna(value):
-        return None
-    text_value = str(value).strip()
-    return text_value or None
-
-
 def _prepare_payloads(df: pd.DataFrame) -> Tuple[List[Dict], int]:
     df = _normalize_columns(df)
 
@@ -231,15 +191,15 @@ def _prepare_payloads(df: pd.DataFrame) -> Tuple[List[Dict], int]:
             for column in EXPECTED_COLUMNS:
                 value = getattr(row, column)
                 if column in TIMESTAMP_COLUMNS:
-                    payload[column] = _to_datetime(value)
+                    payload[column] = coerce_datetime(value)
                 elif column in INT_COLUMNS:
-                    payload[column] = _to_int(value)
+                    payload[column] = coerce_int(value)
                 elif column in FLOAT_COLUMNS:
-                    payload[column] = _to_float(value)
+                    payload[column] = coerce_float(value)
                 elif column in BOOL_COLUMNS:
-                    payload[column] = _to_bool(value)
+                    payload[column] = coerce_bool(value)
                 else:
-                    payload[column] = _clean_string(value)
+                    payload[column] = clean_text(value)
 
             payloads.append(payload)
         except Exception:
@@ -253,31 +213,13 @@ def _prepare_payloads(df: pd.DataFrame) -> Tuple[List[Dict], int]:
     "/csv",
     status_code=status.HTTP_201_CREATED,
     summary="Import pull requests from a CSV file",
+    response_model=PullRequestImportResponse,
 )
 async def import_pull_requests(
     file: UploadFile = File(...),
     session: Session = Depends(get_db_session),
-):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only CSV uploads are supported.",
-        )
-
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Empty file uploaded.",
-        )
-
-    try:
-        df = pd.read_csv(io.BytesIO(contents))
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to parse CSV: {exc}",
-        ) from exc
+) -> PullRequestImportResponse:
+    df = await read_uploaded_csv(file)
 
     payloads, conversion_errors = _prepare_payloads(df)
     if not payloads:
@@ -288,8 +230,8 @@ async def import_pull_requests(
 
     inserted = _repository.bulk_upsert(session, payloads)
 
-    return {
-        "rows_received": len(df),
-        "rows_inserted": inserted,
-        "rows_skipped": conversion_errors + (len(df) - len(payloads)),
-    }
+    return PullRequestImportResponse(
+        rows_received=len(df),
+        rows_inserted=inserted,
+        rows_skipped=conversion_errors + (len(df) - len(payloads)),
+    )

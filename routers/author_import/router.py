@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import json
 from typing import Dict, List, Tuple
 
@@ -10,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.author_repository import AuthorRepository
+from schemas.author_import import AuthorImportResponse
+from utils.csv_loader import read_uploaded_csv
 
 router = APIRouter(prefix="/author-import", tags=["author-import"])
 ORG_ID = 2159
@@ -158,31 +159,13 @@ def _prepare_author_payloads(
     "/csv",
     status_code=status.HTTP_201_CREATED,
     summary="Import authors for a fixed organization from a CSV file",
+    response_model=AuthorImportResponse,
 )
 async def import_authors_from_csv(
     file: UploadFile = File(...),
     session: Session = Depends(get_db_session),
-):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only CSV uploads are supported.",
-        )
-
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Empty file uploaded.",
-        )
-
-    try:
-        df = pd.read_csv(io.BytesIO(contents))
-    except Exception as exc:  # pragma: no cover - pandas error surface
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to parse CSV: {exc}",
-        ) from exc
+) -> AuthorImportResponse:
+    df = await read_uploaded_csv(file)
 
     author_payloads, dropped_prior, conversion_errors = _prepare_author_payloads(df)
     if not author_payloads:
@@ -193,9 +176,9 @@ async def import_authors_from_csv(
 
     inserted = _repository.bulk_upsert(session, author_payloads)
 
-    return {
-        "rows_received": len(df),
-        "rows_inserted": inserted,
-        "rows_skipped": dropped_prior + conversion_errors,
-        "organization_id": ORG_ID,
-    }
+    return AuthorImportResponse(
+        rows_received=len(df),
+        rows_inserted=inserted,
+        rows_skipped=dropped_prior + conversion_errors,
+        organization_id=ORG_ID,
+    )
