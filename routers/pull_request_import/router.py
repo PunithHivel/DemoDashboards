@@ -46,7 +46,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=normalized)
 
 
-def _prepare_payloads(df: pd.DataFrame) -> Tuple[List[Dict], int]:
+def _prepare_payloads(df: pd.DataFrame) -> Tuple[List[Dict], int, Dict[str, int]]:
     df = _normalize_columns(df)
 
     missing = [col for col in EXPECTED_COLUMNS if col not in df.columns]
@@ -66,6 +66,7 @@ def _prepare_payloads(df: pd.DataFrame) -> Tuple[List[Dict], int]:
 
     payloads: List[Dict] = []
     conversion_errors = 0
+    missing_required: Dict[str, int] = {}
 
     for row in filtered.itertuples(index=False):
         try:
@@ -83,12 +84,20 @@ def _prepare_payloads(df: pd.DataFrame) -> Tuple[List[Dict], int]:
                 else:
                     payload[column] = clean_text(value)
 
+            row_missing = [
+                required for required in REQUIRED_COLUMNS if payload.get(required) is None
+            ]
+            if row_missing:
+                for column in row_missing:
+                    missing_required[column] = missing_required.get(column, 0) + 1
+                continue
+
             payloads.append(payload)
         except Exception:
             conversion_errors += 1
             continue
 
-    return payloads, conversion_errors
+    return payloads, conversion_errors, missing_required
 
 
 @router.post(
@@ -103,11 +112,17 @@ async def import_pull_requests(
 ) -> PullRequestImportResponse:
     df = await read_uploaded_csv(file)
 
-    payloads, conversion_errors = _prepare_payloads(df)
+    payloads, conversion_errors, missing_required = _prepare_payloads(df)
     if not payloads:
+        detail = "No valid pull request rows found in CSV."
+        if missing_required:
+            columns = ", ".join(
+                f"{column} ({count} rows)" for column, count in sorted(missing_required.items())
+            )
+            detail = f"{detail} Missing required values for: {columns}."
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid pull request rows found in CSV.",
+            detail=detail,
         )
 
     inserted = _repository.bulk_upsert(session, payloads)
