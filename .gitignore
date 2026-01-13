@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 .venv/
+
+# Data files
+data/
+*.csv
