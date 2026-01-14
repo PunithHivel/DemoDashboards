@@ -112,6 +112,37 @@ COMMIT_INSERT_SQL = text(
         :remark,
         :is_auto_excluded
     )
+    ON CONFLICT (hash, repoid, organizationid)
+    DO UPDATE SET
+        authorid = EXCLUDED.authorid,
+        commitid = EXCLUDED.commitid,
+        type = EXCLUDED.type,
+        date = EXCLUDED.date,
+        skippedregexfiles = EXCLUDED.skippedregexfiles,
+        missingcommit = EXCLUDED.missingcommit,
+        message = EXCLUDED.message,
+        repositoryuuid = EXCLUDED.repositoryuuid,
+        repositoryfullname = EXCLUDED.repositoryfullname,
+        htmllink = EXCLUDED.htmllink,
+        rework = EXCLUDED.rework,
+        newwork = EXCLUDED.newwork,
+        maintenance = EXCLUDED.maintenance,
+        assistance = EXCLUDED.assistance,
+        linesadded = EXCLUDED.linesadded,
+        linesremoved = EXCLUDED.linesremoved,
+        originalauthorid = EXCLUDED.originalauthorid,
+        processed = EXCLUDED.processed,
+        skipfromcalculation = EXCLUDED.skipfromcalculation,
+        branch = EXCLUDED.branch,
+        jiramappingprocessed = EXCLUDED.jiramappingprocessed,
+        workspaceid = EXCLUDED.workspaceid,
+        codingfilter = EXCLUDED.codingfilter,
+        userintegrationid = EXCLUDED.userintegrationid,
+        jiradatacollected = EXCLUDED.jiradatacollected,
+        estimated_storypoints = EXCLUDED.estimated_storypoints,
+        remark = EXCLUDED.remark,
+        is_auto_excluded = EXCLUDED.is_auto_excluded,
+        modifieddate = CURRENT_TIMESTAMP
     RETURNING id, hash, repoid, organizationid
     """
 )

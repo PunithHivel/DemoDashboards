@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from db.session import get_db_session
@@ -25,6 +25,9 @@ _repository = CommitRepository()
 
 
 def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
+    # Columns that will be injected from query parameters, not from CSV
+    INJECTED_COLUMNS = {"organizationid", "workspaceid", "userintegrationid"}
+    
     missing_columns = [col for col in REQUIRED_FIELDS if col not in df.columns]
     if missing_columns:
         raise HTTPException(
@@ -39,6 +42,10 @@ def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
         try:
             row: Dict[str, Any] = {}
             for column in COMMIT_COLUMNS:
+                # Skip columns that will be injected from query parameters
+                if column in INJECTED_COLUMNS:
+                    continue
+                    
                 raw_value = sanitize_value(
                     record.get(column, DEFAULT_COMMIT_VALUES.get(column))
                 )
@@ -74,6 +81,9 @@ def _prepare_rows(df: pd.DataFrame) -> List[Dict]:
     response_model=CommitImportResponse,
 )
 async def import_commits_from_csv(
+    organization_id: int = Query(..., description="Organization ID"),
+    workspace_id: int = Query(..., description="Workspace ID"),
+    user_integration_id: int = Query(..., description="User Integration ID"),
     file: UploadFile = File(...),
     session: Session = Depends(get_db_session),
 ) -> CommitImportResponse:
@@ -85,6 +95,12 @@ async def import_commits_from_csv(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid commit rows found in CSV.",
         )
+
+    # Inject organizationid, workspaceid, and userintegrationid into each row
+    for row in rows:
+        row["organizationid"] = organization_id
+        row["workspaceid"] = workspace_id
+        row["userintegrationid"] = user_integration_id
 
     inserted = _repository.bulk_insert(session, rows)
     return CommitImportResponse(

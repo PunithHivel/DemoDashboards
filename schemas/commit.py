@@ -8,8 +8,6 @@ REQUIRED_FIELDS: Set[str] = {
     "commitid",
     "repoid",
     "repositoryfullname",
-    "workspaceid",
-    "organizationid",
 }
 
 INT_FIELDS: Set[str] = {
@@ -22,8 +20,6 @@ INT_FIELDS: Set[str] = {
     "linesadded",
     "linesremoved",
     "originalauthorid",
-    "workspaceid",
-    "userintegrationid",
     "estimated_storypoints",
 }
 
