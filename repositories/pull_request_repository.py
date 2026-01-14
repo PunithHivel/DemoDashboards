@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 PULL_REQUEST_INSERT_SQL = text(
     """
     INSERT INTO insightly.pull_request (
-        id,
         organizationid,
         workspaceid,
         actualpullrequestid,
@@ -85,7 +84,6 @@ PULL_REQUEST_INSERT_SQL = text(
         incident_record_id,
         is_incident_pr
     ) VALUES (
-        :id,
         :organizationid,
         :workspaceid,
         :actualpullrequestid,
@@ -161,7 +159,7 @@ PULL_REQUEST_INSERT_SQL = text(
         :incident_record_id,
         :is_incident_pr
     )
-    ON CONFLICT (id, organizationid)
+    ON CONFLICT (actualpullrequestid, repoid, organizationid)
     DO UPDATE SET
         workspaceid = EXCLUDED.workspaceid,
         actualpullrequestid = EXCLUDED.actualpullrequestid,
