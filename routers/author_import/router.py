@@ -102,7 +102,7 @@ def _prepare_author_payloads(
 
     initial_count = len(df)
     filtered_df = df[list(CSV_TO_DB_FIELDS.keys())].copy()
-    filtered_df = filtered_df.drop_duplicates(subset=["id"])
+    filtered_df = filtered_df.drop_duplicates(subset=["username"])
     filtered_df = filtered_df.dropna(subset=list(REQUIRED_NON_NULL))
     filtered_count = len(filtered_df)
 
@@ -111,29 +111,18 @@ def _prepare_author_payloads(
     for row in filtered_df.itertuples(index=False):
         try:
             user_role_value = None if pd.isna(row.user_role) else str(row.user_role).strip()
-            account_id = None
-            if not pd.isna(row.unique_ic):
-                account_candidate = str(row.unique_ic).strip()
-                if account_candidate:
-                    try:
-                        if int(float(account_candidate)) == int(row.id):
-                            account_candidate = ""
-                    except (ValueError, TypeError):
-                        pass
-
-                account_id = account_candidate or None
 
             author_payload = {
-                "id": int(row.id),
+                "id": None,
                 "organizationid": organization_id,
-                "accountid": account_id,
+                "accountid": None,
                 "name": str(row.name).strip(),
                 "email": None if pd.isna(row.email) else str(row.email).strip(),
                 "labels": _normalize_labels(row.labels),
                 "username": str(row.username).strip(),
                 "login_via": str(row.login_via).strip(),
                 "access_status": user_role_value,
-                "sharedteams": _normalize_shared_teams(row.teams),
+                "sharedteams": None,
                 "scmprovider": str(row.scm_provider).strip(),
                 "active": True,
             }

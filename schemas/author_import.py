@@ -4,7 +4,6 @@ from fastapi import Form
 from pydantic import BaseModel, Field
 
 CSV_TO_DB_FIELDS: Dict[str, str] = {
-    "unique_ic": "accountid",
     "name": "name",
     "email": "email",
     "labels": "labels",
@@ -13,9 +12,8 @@ CSV_TO_DB_FIELDS: Dict[str, str] = {
     "user_role": "access_status",
     "teams": "sharedteams",
     "scm_provider": "scmprovider",
-    "id": "id",
 }
-REQUIRED_NON_NULL: Set[str] = {"id", "scm_provider", "name", "username", "login_via"}
+REQUIRED_NON_NULL: Set[str] = {"scm_provider", "name", "username", "login_via"}
 
 
 class AuthorImportRequest(BaseModel):
