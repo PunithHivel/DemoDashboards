@@ -13,6 +13,8 @@ from routers.pr_comment.router import router as pr_comment_router
 from routers.health.router import router as health_router
 from routers.change_requests.router import router as change_requests_router
 from routers.deployment_frequency.router import router as deployment_frequency_router
+from routers.lookup.router import router as lookup_router
+from metrics_editor.router import router as metrics_editor_router
 
 app = FastAPI(title="Author Import API")
 app.include_router(author_import_router)
@@ -28,3 +30,5 @@ app.include_router(pr_comment_router)
 app.include_router(health_router)
 app.include_router(change_requests_router)
 app.include_router(deployment_frequency_router)
+app.include_router(metrics_editor_router)
+app.include_router(lookup_router)
