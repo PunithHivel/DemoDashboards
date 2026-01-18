@@ -7,11 +7,32 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from repositories.repo_repository import RepoRepository
-from schemas.repo import RepoSeedRequest, RepoSeedResponse
+from schemas.repo import RepoListResponse, RepoSeedRequest, RepoSeedResponse
 
 
 router = APIRouter(prefix="/repo", tags=["repo"])
 _repository = RepoRepository()
+
+
+@router.get(
+    "/list",
+    status_code=status.HTTP_200_OK,
+    summary="List repositories for an organization",
+    response_model=RepoListResponse,
+)
+def list_repos(
+    organization_id: int,
+    workspace_id: int | None = None,
+    session: Session = Depends(get_db_session),
+) -> RepoListResponse:
+    repos = _repository.list_repos(
+        session, organization_id=organization_id, workspace_id=workspace_id
+    )
+    return RepoListResponse(
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        repos=repos,
+    )
 
 
 @router.post(

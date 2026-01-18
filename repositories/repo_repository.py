@@ -153,3 +153,23 @@ class RepoRepository:
             created.append(dict(result.mappings().one()))
 
         return created
+
+    def list_repos(
+        self, session: Session, organization_id: int, workspace_id: int | None = None
+    ) -> List[Dict]:
+        params: Dict[str, int] = {"organization_id": organization_id}
+        filters = ["organizationid = :organization_id"]
+        if workspace_id is not None:
+            filters.append("workspaceid = :workspace_id")
+            params["workspace_id"] = workspace_id
+
+        query = text(
+            f"""
+            SELECT id, name, slug, workspaceid, organizationid
+            FROM insightly.repo
+            WHERE {' AND '.join(filters)}
+            ORDER BY id
+            """
+        )
+        rows = session.execute(query, params).mappings().all()
+        return [dict(row) for row in rows]
