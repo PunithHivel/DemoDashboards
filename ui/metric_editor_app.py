@@ -59,7 +59,7 @@ def fetch_eligible(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def fetch_eligible_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        resp = requests.post(ELIGIBLE_SUMMARY_ENDPOINT, json=payload, timeout=30)
+        resp = requests.post(ELIGIBLE_SUMMARY_ENDPOINT, json=payload, timeout=60)
         if resp.ok:
             return resp.json()
         detail = None
@@ -103,6 +103,18 @@ def summarize_impact(impact: Dict[str, Any]) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+def build_month_options(start: date, end: date) -> List[str]:
+    options: List[str] = []
+    cursor = date(start.year, start.month, 1)
+    while cursor < end:
+        options.append(cursor.strftime("%Y-%m"))
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+    return options
 
 
 catalog = fetch_catalog()
@@ -281,6 +293,16 @@ if action in {"shift_open_prs", "shift_merged_prs", "shift_commit_dates"}:
     options["source_month"] = st.text_input("Source month (YYYY-MM)")
     options["target_month"] = st.text_input("Target month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=10, step=1)
+    auto_expand = st.checkbox("Auto-expand to other months if needed", value=False)
+    options["auto_expand"] = auto_expand
+    if auto_expand:
+        month_options = build_month_options(start_date, end_date)
+        default_months = [m for m in month_options if m != options["target_month"]]
+        options["source_months"] = st.multiselect(
+            "Source months to borrow from",
+            options=month_options,
+            default=default_months,
+        )
     show_summary = True
 elif action in {"set_reviewed_count", "set_unreviewed_count"}:
     options["month"] = st.text_input("Month (YYYY-MM)")

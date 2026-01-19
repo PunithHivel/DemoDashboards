@@ -271,6 +271,15 @@ def get_eligible_summary(session: Session, request: EligibilitySummaryRequest) -
     if scope.author_ids:
         filters.append("authorid = ANY(:author_ids)")
         params["author_ids"] = scope.author_ids
+    if scope.team_id is not None and table in {"insightly.pull_request", "insightly.commit"}:
+        filters.append(
+            "authorid IN ("
+            "SELECT tar.authorid FROM insightly.teamauthorrelation tar "
+            "WHERE tar.organizationid = :org_id AND tar.teamid = :team_id "
+            "AND (tar.exitdate IS NULL OR tar.exitdate > NOW())"
+            ")"
+        )
+        params["team_id"] = scope.team_id
 
     query = f"""
         SELECT DATE_TRUNC('month', {date_field}) AS period,

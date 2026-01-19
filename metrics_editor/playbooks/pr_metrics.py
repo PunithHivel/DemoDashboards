@@ -81,6 +81,74 @@ def _count_prs(
     return int(session.execute(text(query), params).scalar() or 0)
 
 
+def _normalize_month_list(source_month: str, source_months: Optional[List[str]], auto_expand: bool) -> List[str]:
+    if not auto_expand:
+        return [source_month]
+    months: List[str] = []
+    if source_month:
+        months.append(source_month)
+    for month in source_months or []:
+        if month and month not in months:
+            months.append(month)
+    return months or [source_month]
+
+
+def _resolve_shift_groups(
+    session: Session,
+    scope,
+    date_field: str,
+    source_months: List[str],
+    target_month: str,
+    count: int,
+    extra_filters: List[str],
+    label: str,
+) -> Tuple[List[Dict[str, Any]], List[str], List[Dict[str, Any]]]:
+    target_start, _ = _month_bounds(target_month)
+    remaining = count
+    groups: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    before_rows: List[Dict[str, Any]] = []
+
+    for month in source_months:
+        if remaining <= 0:
+            break
+        start, end = _month_bounds(month)
+        available = _count_prs(session, scope, date_field, start, end, extra_filters)
+        if available <= 0:
+            continue
+        take = min(available, remaining)
+        ids = _select_pr_ids(session, scope, date_field, start, end, extra_filters, take)
+        if not ids:
+            continue
+        delta_days = (target_start - start).days
+        groups.append({"source_month": month, "ids": ids, "delta_days": delta_days, "available": available})
+        remaining -= len(ids)
+        for pr_id in ids:
+            before_rows.append(
+                {"id": pr_id, "source_month": month, "target_month": target_month, "delta_days": delta_days}
+            )
+
+    if remaining > 0:
+        raise ValueError(
+            f"Only {count - remaining} {label} PRs found across "
+            f"{', '.join(source_months)}. Reduce the count to {count - remaining} or add more source months."
+        )
+
+    if len(source_months) > 1:
+        warnings.append(
+            "Auto-expand enabled. "
+            + ", ".join(
+                f"{group['source_month']}: {len(group['ids'])} of {group['available']}" for group in groups
+            )
+        )
+
+    if len(before_rows) > 200:
+        warnings.append("Preview rows truncated to 200 IDs.")
+        before_rows = before_rows[:200]
+
+    return groups, warnings, before_rows
+
+
 def _max_expr(
     session: Session,
     scope,
@@ -104,42 +172,34 @@ def plan_shift_open_prs(session: Session, request: MetricChangeRequest) -> Chang
     source_month = request.options.get("source_month")
     target_month = request.options.get("target_month")
     count = int(request.options.get("count", 0))
+    auto_expand = bool(request.options.get("auto_expand", False))
+    source_months = request.options.get("source_months") or []
     if not source_month or not target_month:
         raise ValueError("source_month and target_month are required")
     if count <= 0:
         raise ValueError("count must be > 0")
 
-    source_start, source_end = _month_bounds(source_month)
-    target_start, _ = _month_bounds(target_month)
-    delta_days = (target_start - source_start).days
-    available = _count_prs(
+    months = _normalize_month_list(source_month, source_months, auto_expand)
+    groups, warnings, before_rows = _resolve_shift_groups(
         session,
         request.scope,
         "createdon",
-        source_start,
-        source_end,
-        ["state = 'OPEN'"],
-    )
-    if available < count:
-        raise ValueError(
-            f"Only {available} OPEN PRs found in {source_month}. Reduce the count to {available} or less."
-        )
-
-    ids = _select_pr_ids(
-        session,
-        request.scope,
-        "createdon",
-        source_start,
-        source_end,
-        ["state = 'OPEN'"],
+        months,
+        target_month,
         count,
+        ["state = 'OPEN'"],
+        "OPEN",
     )
 
-    if not ids:
-        raise ValueError("No matching OPEN PRs found for the source month")
+    summary = f"Shift {count} OPEN PRs to {target_month}"
+    if len(months) == 1:
+        summary = f"Shift {count} OPEN PRs from {months[0]} to {target_month}"
+    elif months:
+        summary += f" (sources: {', '.join(months)})"
 
-    summary = f"Shift {len(ids)} OPEN PRs from {source_month} to {target_month}"
-    sql = [
+    sql: List[str] = []
+    sql_params: List[Dict[str, Any]] = []
+    base_sql = [
         """
         UPDATE insightly.pull_request
         SET createdon = createdon + (INTERVAL '1 day' * :delta_days),
@@ -170,15 +230,20 @@ def plan_shift_open_prs(session: Session, request: MetricChangeRequest) -> Chang
         WHERE pullrequestid = ANY(:ids);
         """,
     ]
-    params = {"ids": ids, "delta_days": delta_days}
+    for group in groups:
+        params = {"ids": group["ids"], "delta_days": group["delta_days"]}
+        for statement in base_sql:
+            sql.append(statement)
+            sql_params.append(params)
 
     return ChangePlan(
         plan_id=create_plan_id(),
         summary=summary,
         sql_statements=[s.strip() for s in sql],
-        sql_params=[params] * len(sql),
-        before_rows=[],
-        expected={"shifted_prs": len(ids)},
+        sql_params=sql_params,
+        before_rows=before_rows,
+        expected={"shifted_prs": count},
+        warnings=warnings,
     )
 
 
@@ -186,42 +251,34 @@ def plan_shift_merged_prs(session: Session, request: MetricChangeRequest) -> Cha
     source_month = request.options.get("source_month")
     target_month = request.options.get("target_month")
     count = int(request.options.get("count", 0))
+    auto_expand = bool(request.options.get("auto_expand", False))
+    source_months = request.options.get("source_months") or []
     if not source_month or not target_month:
         raise ValueError("source_month and target_month are required")
     if count <= 0:
         raise ValueError("count must be > 0")
 
-    source_start, source_end = _month_bounds(source_month)
-    target_start, _ = _month_bounds(target_month)
-    delta_days = (target_start - source_start).days
-
-    available = _count_prs(
+    months = _normalize_month_list(source_month, source_months, auto_expand)
+    groups, warnings, before_rows = _resolve_shift_groups(
         session,
         request.scope,
         "mergedon",
-        source_start,
-        source_end,
-        ["state = 'MERGED'"],
-    )
-    if available < count:
-        raise ValueError(
-            f"Only {available} MERGED PRs found in {source_month}. Reduce the count to {available} or less."
-        )
-
-    ids = _select_pr_ids(
-        session,
-        request.scope,
-        "mergedon",
-        source_start,
-        source_end,
-        ["state = 'MERGED'"],
+        months,
+        target_month,
         count,
+        ["state = 'MERGED'"],
+        "MERGED",
     )
-    if not ids:
-        raise ValueError("No matching MERGED PRs found for the source month")
 
-    summary = f"Shift {len(ids)} MERGED PRs from {source_month} to {target_month}"
-    sql = [
+    summary = f"Shift {count} MERGED PRs to {target_month}"
+    if len(months) == 1:
+        summary = f"Shift {count} MERGED PRs from {months[0]} to {target_month}"
+    elif months:
+        summary += f" (sources: {', '.join(months)})"
+
+    sql: List[str] = []
+    sql_params: List[Dict[str, Any]] = []
+    base_sql = [
         """
         UPDATE insightly.pull_request
         SET mergedon = mergedon + (INTERVAL '1 day' * :delta_days),
@@ -255,15 +312,20 @@ def plan_shift_merged_prs(session: Session, request: MetricChangeRequest) -> Cha
         WHERE pullrequestid = ANY(:ids);
         """,
     ]
-    params = {"ids": ids, "delta_days": delta_days}
+    for group in groups:
+        params = {"ids": group["ids"], "delta_days": group["delta_days"]}
+        for statement in base_sql:
+            sql.append(statement)
+            sql_params.append(params)
 
     return ChangePlan(
         plan_id=create_plan_id(),
         summary=summary,
         sql_statements=[s.strip() for s in sql],
-        sql_params=[params] * len(sql),
-        before_rows=[],
-        expected={"shifted_prs": len(ids)},
+        sql_params=sql_params,
+        before_rows=before_rows,
+        expected={"shifted_prs": count},
+        warnings=warnings,
     )
 
 
