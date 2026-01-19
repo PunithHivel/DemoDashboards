@@ -39,8 +39,14 @@ CHANGE_METRICS: set[str] = set()
 
 def _summary_definition(action: str, options: Dict[str, Any]) -> Tuple[str, str, str]:
     if action == "shift_open_prs":
+        selection_policy = options.get("selection_policy", "strict")
+        if selection_policy == "expanded":
+            return "insightly.pull_request", "createdon", "state IN ('OPEN', 'MERGED', 'DECLINED')"
         return "insightly.pull_request", "createdon", "state = 'OPEN'"
     if action == "shift_merged_prs":
+        selection_policy = options.get("selection_policy", "strict")
+        if selection_policy == "expanded":
+            return "insightly.pull_request", "mergedon", "mergedon IS NOT NULL"
         return "insightly.pull_request", "mergedon", "state = 'MERGED'"
     if action == "set_reviewed_count":
         return "insightly.pull_request", "mergedon", "state = 'MERGED' AND approvedon IS NULL"

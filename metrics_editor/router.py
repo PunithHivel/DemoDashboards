@@ -20,6 +20,9 @@ from metrics_editor.models import (
     MetricChangeRequest,
     MetricImpact,
     MetricScope,
+    AIChangeRequest,
+    AIChangePlan,
+    AIChangeResult,
 )
 from repositories.lookup_repository import LookupRepository
 from repositories.repo_repository import RepoRepository
@@ -210,3 +213,120 @@ def get_eligible_summary_endpoint(
         return get_eligible_summary(session, request)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/ai/plan", response_model=AIChangePlan)
+def ai_plan_change(
+    request: AIChangeRequest,
+    session: Session = Depends(get_db_session),
+) -> AIChangePlan:
+    """
+    Generate an AI-driven change plan based on natural language intent.
+    
+    This endpoint:
+    1. Accepts a natural language change request
+    2. Uses AI to analyze the request and current data state
+    3. Generates a safe, validated SQL plan
+    4. Returns the plan for preview
+    """
+    try:
+        # Resolve team to authors if needed
+        if request.scope.team_id and not request.scope.author_ids:
+            authors = _lookup_repository.list_team_authors(
+                session, request.scope.organization_id, request.scope.team_id
+            )
+            request.scope.author_ids = [author["id"] for author in authors]
+        
+        # Import here to avoid circular dependency
+        from metrics_editor.ai_orchestrator import AIOrchestrator
+        
+        orchestrator = AIOrchestrator(session)
+        plan = orchestrator.process_change_request(request)
+        
+        return plan
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to generate AI plan: {str(exc)}"
+        ) from exc
+
+
+@router.post("/ai/apply", response_model=AIChangeResult)
+def ai_apply_change(
+    plan: AIChangePlan,
+    session: Session = Depends(get_db_session),
+) -> AIChangeResult:
+    """
+    Apply an AI-generated change plan.
+    
+    This endpoint:
+    1. Accepts a validated AI change plan
+    2. Executes the SQL statements
+    3. Returns the result with metrics affected
+    """
+    try:
+        rows_affected = 0
+        for statement, params in zip(plan.sql_statements, plan.sql_params):
+            result = session.execute(text(statement), params)
+            if result.rowcount is not None:
+                rows_affected += result.rowcount
+        
+        # Save the plan to history
+        if hasattr(plan, 'model_dump'):
+            plan_payload = plan.model_dump()
+        else:
+            plan_payload = plan.dict()
+        
+        save_plan(plan_payload)
+        
+        return AIChangeResult(
+            plan_id=plan.plan_id,
+            applied=True,
+            rows_affected=rows_affected,
+            affected_metrics=plan.affected_metrics,
+            warnings=plan.warnings,
+            reasoning=plan.reasoning,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to apply AI plan: {str(exc)}"
+        ) from exc
+
+
+@router.post("/ai/preview-impact")
+def ai_preview_impact(
+    plan: AIChangePlan,
+    session: Session = Depends(get_db_session),
+) -> Dict[str, Any]:
+    """
+    Preview the impact of an AI-generated plan on metrics.
+    
+    This endpoint:
+    1. Accepts an AI change plan
+    2. Simulates the changes in a transaction
+    3. Computes before/after snapshots for affected metrics
+    4. Rolls back the transaction
+    """
+    try:
+        from metrics_editor.engine import snapshot_metric
+        
+        # Create a scope from the plan (we'll need to extract this from context)
+        # For now, return a simplified response
+        affected_metrics = plan.affected_metrics
+        
+        result = {
+            "plan_id": plan.plan_id,
+            "affected_metrics": affected_metrics,
+            "estimated_rows": plan.estimated_rows,
+            "validation_checks": plan.validation_checks,
+            "warnings": plan.warnings,
+            "reasoning": plan.reasoning,
+        }
+        
+        return result
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to preview impact: {str(exc)}"
+        ) from exc

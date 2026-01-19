@@ -17,6 +17,9 @@ HISTORY_ENDPOINT = f"{API_URL}/metrics-editor/history"
 REPO_LIST_ENDPOINT = f"{API_URL}/repo/list"
 ELIGIBLE_ENDPOINT = f"{API_URL}/metrics-editor/eligible"
 ELIGIBLE_SUMMARY_ENDPOINT = f"{API_URL}/metrics-editor/eligible-summary"
+AI_PLAN_ENDPOINT = f"{API_URL}/metrics-editor/ai/plan"
+AI_APPLY_ENDPOINT = f"{API_URL}/metrics-editor/ai/apply"
+AI_PREVIEW_ENDPOINT = f"{API_URL}/metrics-editor/ai/preview-impact"
 
 st.set_page_config(page_title="Metrics Editor", layout="wide")
 st.title("Metrics Editor")
@@ -268,23 +271,24 @@ with st.expander("Eligible coverage"):
 team_id: Optional[int] = filters.get("team_id")
 author_ids: Optional[List[int]] = filters.get("author_ids")
 
-affected_metric_ids = selected_metric.get("affects", [])
-affected_labels = [metric_by_id[mid]["label"] for mid in affected_metric_ids if mid in metric_by_id]
-if affected_metric_ids:
-    affected_rows = []
-    for metric_id in affected_metric_ids:
-        metric_info = metric_by_id.get(metric_id, {})
-        affected_rows.append(
-            {
-                "Metric": metric_info.get("label", metric_id),
-                "Source": metric_info.get("source", "Unknown"),
-            }
-        )
-    st.subheader("Affected metrics")
-    st.dataframe(pd.DataFrame(affected_rows), use_container_width=True)
-else:
-    st.subheader("Affected metrics")
-    st.caption("No downstream metrics are marked as affected for this change.")
+if selected_metric:
+    affected_metric_ids = selected_metric.get("affects", [])
+    affected_labels = [metric_by_id[mid]["label"] for mid in affected_metric_ids if mid in metric_by_id]
+    if affected_metric_ids:
+        affected_rows = []
+        for metric_id in affected_metric_ids:
+            metric_info = metric_by_id.get(metric_id, {})
+            affected_rows.append(
+                {
+                    "Metric": metric_info.get("label", metric_id),
+                    "Source": metric_info.get("source", "Unknown"),
+                }
+            )
+        st.subheader("Affected metrics")
+        st.dataframe(pd.DataFrame(affected_rows), use_container_width=True)
+    else:
+        st.subheader("Affected metrics")
+        st.caption("No downstream metrics are marked as affected for this change.")
 
 st.subheader("Step 3: Change request")
 options: Dict[str, Any] = {}
@@ -293,6 +297,17 @@ if action in {"shift_open_prs", "shift_merged_prs", "shift_commit_dates"}:
     options["source_month"] = st.text_input("Source month (YYYY-MM)")
     options["target_month"] = st.text_input("Target month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=10, step=1)
+    if action in {"shift_open_prs", "shift_merged_prs"}:
+        selection_labels = {
+            "strict": "Eligible only (metric filter)",
+            "expanded": "All PRs in scope",
+        }
+        selection_key = st.selectbox(
+            "Selection policy",
+            options=list(selection_labels.keys()),
+            format_func=lambda key: selection_labels.get(key, key),
+        )
+        options["selection_policy"] = selection_key
     auto_expand = st.checkbox("Auto-expand to other months if needed", value=False)
     options["auto_expand"] = auto_expand
     if auto_expand:
@@ -380,7 +395,7 @@ with col1:
                 "options": options,
             }
             if action != "read_only":
-                resp = requests.post(IMPACT_ENDPOINT, json=request_payload, timeout=60)
+                resp = requests.post(IMPACT_ENDPOINT, json=request_payload, timeout=300)
                 if resp.ok:
                     st.session_state["impact"] = resp.json()
                 else:

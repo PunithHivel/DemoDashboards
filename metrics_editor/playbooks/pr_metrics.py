@@ -174,10 +174,18 @@ def plan_shift_open_prs(session: Session, request: MetricChangeRequest) -> Chang
     count = int(request.options.get("count", 0))
     auto_expand = bool(request.options.get("auto_expand", False))
     source_months = request.options.get("source_months") or []
+    selection_policy = request.options.get("selection_policy", "strict")
     if not source_month or not target_month:
         raise ValueError("source_month and target_month are required")
     if count <= 0:
         raise ValueError("count must be > 0")
+
+    if selection_policy == "expanded":
+        extra_filters = ["state IN ('OPEN', 'MERGED', 'DECLINED')"]
+        label = "PR"
+    else:
+        extra_filters = ["state = 'OPEN'"]
+        label = "OPEN"
 
     months = _normalize_month_list(source_month, source_months, auto_expand)
     groups, warnings, before_rows = _resolve_shift_groups(
@@ -187,8 +195,8 @@ def plan_shift_open_prs(session: Session, request: MetricChangeRequest) -> Chang
         months,
         target_month,
         count,
-        ["state = 'OPEN'"],
-        "OPEN",
+        extra_filters,
+        label,
     )
 
     summary = f"Shift {count} OPEN PRs to {target_month}"
@@ -253,10 +261,18 @@ def plan_shift_merged_prs(session: Session, request: MetricChangeRequest) -> Cha
     count = int(request.options.get("count", 0))
     auto_expand = bool(request.options.get("auto_expand", False))
     source_months = request.options.get("source_months") or []
+    selection_policy = request.options.get("selection_policy", "strict")
     if not source_month or not target_month:
         raise ValueError("source_month and target_month are required")
     if count <= 0:
         raise ValueError("count must be > 0")
+
+    if selection_policy == "expanded":
+        extra_filters = ["mergedon IS NOT NULL"]
+        label = "PR"
+    else:
+        extra_filters = ["state = 'MERGED'"]
+        label = "MERGED"
 
     months = _normalize_month_list(source_month, source_months, auto_expand)
     groups, warnings, before_rows = _resolve_shift_groups(
@@ -266,8 +282,8 @@ def plan_shift_merged_prs(session: Session, request: MetricChangeRequest) -> Cha
         months,
         target_month,
         count,
-        ["state = 'MERGED'"],
-        "MERGED",
+        extra_filters,
+        label,
     )
 
     summary = f"Shift {count} MERGED PRs to {target_month}"

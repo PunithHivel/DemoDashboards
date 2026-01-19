@@ -8,3 +8,5 @@ python-dotenv
 requests
 streamlit
 watchdog
+openai>=1.0.0
+jinja2
