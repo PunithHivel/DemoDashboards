@@ -5,7 +5,14 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from metrics_editor.models import EligibilityRequest, EligibilityResponse, EligibleEntity
+from metrics_editor.models import (
+    EligibilityRequest,
+    EligibilityResponse,
+    EligibilitySummaryPoint,
+    EligibilitySummaryRequest,
+    EligibilitySummaryResponse,
+    EligibleEntity,
+)
 
 
 PR_METRICS = {
@@ -17,14 +24,69 @@ PR_METRICS = {
     "large_prs",
     "review_time",
     "cycle_time",
+    "delivery_lead_time",
     "deploy_time",
     "coding_time",
     "release_prs",
+    "deployment_frequency",
     "hotfix_prs",
+    "mttr",
 }
 
 COMMIT_METRICS = {"rework_pct", "newwork_pct", "maintenance_pct", "commit_frequency"}
-CHANGE_METRICS = {"mttr"}
+CHANGE_METRICS: set[str] = set()
+
+
+def _summary_definition(action: str, options: Dict[str, Any]) -> Tuple[str, str, str]:
+    if action == "shift_open_prs":
+        return "insightly.pull_request", "createdon", "state = 'OPEN'"
+    if action == "shift_merged_prs":
+        return "insightly.pull_request", "mergedon", "state = 'MERGED'"
+    if action == "set_reviewed_count":
+        return "insightly.pull_request", "mergedon", "state = 'MERGED' AND approvedon IS NULL"
+    if action == "set_unreviewed_count":
+        return "insightly.pull_request", "mergedon", "state = 'MERGED' AND approvedon IS NOT NULL"
+    if action == "set_flashy_reviews":
+        flashy = bool(options.get("flashy", True))
+        size_threshold = int(options.get("size_threshold", 400))
+        flashy_minutes = int(options.get("flashy_minutes", 5))
+        if flashy:
+            filter_sql = (
+                "state = 'MERGED' AND approvedon IS NOT NULL AND reviewbranchpr = TRUE "
+                f"AND (COALESCE(linesadded,0) + COALESCE(linesremoved,0)) > {size_threshold} "
+                f"AND (opentoreviewduration IS NULL OR opentoreviewduration >= {flashy_minutes})"
+            )
+        else:
+            filter_sql = (
+                "state = 'MERGED' AND approvedon IS NOT NULL AND reviewbranchpr = TRUE "
+                f"AND (COALESCE(linesadded,0) + COALESCE(linesremoved,0)) > {size_threshold} "
+                f"AND opentoreviewduration < {flashy_minutes}"
+            )
+        return "insightly.pull_request", "mergedon", filter_sql
+    if action in {"toggle_release_prs", "toggle_hotfix_prs"}:
+        column = "releasebranchpr" if action == "toggle_release_prs" else "hotfixpr"
+        target = bool(options.get("value", True))
+        flag = "TRUE" if target else "FALSE"
+        return "insightly.pull_request", "mergedon", f"state = 'MERGED' AND {column} IS DISTINCT FROM {flag}"
+    if action == "set_large_prs":
+        make_large = bool(options.get("large", True))
+        threshold_lines = int(options.get("threshold_lines", 400))
+        if make_large:
+            filter_sql = (
+                "state = 'MERGED' AND (COALESCE(linesadded,0) + COALESCE(linesremoved,0)) <= "
+                f"{threshold_lines}"
+            )
+        else:
+            filter_sql = (
+                "state = 'MERGED' AND (COALESCE(linesadded,0) + COALESCE(linesremoved,0)) > "
+                f"{threshold_lines}"
+            )
+        return "insightly.pull_request", "mergedon", filter_sql
+    if action in {"scale_review_time", "scale_cycle_time", "scale_deploy_time", "scale_coding_time", "scale_mttr_duration"}:
+        return "insightly.pull_request", "mergedon", "state = 'MERGED'"
+    if action in {"set_commit_mix", "shift_commit_dates"}:
+        return "insightly.commit", "date", "type = 'COMMIT'"
+    return "insightly.pull_request", "mergedon", "state = 'MERGED'"
 
 
 def _pr_filter(metric_id: str) -> Tuple[str, str]:
@@ -58,10 +120,19 @@ def _pr_filter(metric_id: str) -> Tuple[str, str]:
         )
     if metric_id in {"review_time", "cycle_time", "deploy_time", "coding_time"}:
         return "mergedon", "state = 'MERGED'"
+    if metric_id == "delivery_lead_time":
+        return (
+            "mergedon",
+            "state = 'MERGED' AND cycletimeduration IS NOT NULL AND mergetodeployduration IS NOT NULL",
+        )
     if metric_id == "release_prs":
         return "mergedon", "state = 'MERGED' AND releasebranchpr = TRUE"
+    if metric_id == "deployment_frequency":
+        return "mergedon", "state = 'MERGED'"
     if metric_id == "hotfix_prs":
         return "mergedon", "state = 'MERGED' AND hotfixpr = TRUE"
+    if metric_id == "mttr":
+        return "mergedon", "state = 'MERGED' AND hotfixpr = TRUE AND cycletimeduration IS NOT NULL"
     return "mergedon", "state = 'MERGED'"
 
 
@@ -182,3 +253,36 @@ def get_eligible_entities(session: Session, request: EligibilityRequest) -> Elig
         teams = [EligibleEntity(id=row["id"], count=row["count"]) for row in team_rows]
 
     return EligibilityResponse(metric_id=request.metric_id, repos=repos, teams=teams, authors=authors)
+
+
+def get_eligible_summary(session: Session, request: EligibilitySummaryRequest) -> EligibilitySummaryResponse:
+    table, date_field, filter_sql = _summary_definition(request.action, request.options)
+    scope = request.scope
+    params: Dict[str, Any] = {
+        "org_id": scope.organization_id,
+        "start": scope.start_date,
+        "end": scope.end_date,
+    }
+
+    filters = ["organizationid = :org_id", filter_sql, f"{date_field} >= :start", f"{date_field} < :end"]
+    if scope.repo_id is not None:
+        filters.append("repoid = :repo_id")
+        params["repo_id"] = scope.repo_id
+    if scope.author_ids:
+        filters.append("authorid = ANY(:author_ids)")
+        params["author_ids"] = scope.author_ids
+
+    query = f"""
+        SELECT DATE_TRUNC('month', {date_field}) AS period,
+               COUNT(*) AS eligible_count
+        FROM {table}
+        WHERE {' AND '.join(filters)}
+        GROUP BY DATE_TRUNC('month', {date_field})
+        ORDER BY DATE_TRUNC('month', {date_field})
+    """
+    rows = session.execute(text(query), params).fetchall()
+    points = [
+        EligibilitySummaryPoint(period=row[0].strftime("%Y-%m"), eligible_count=int(row[1] or 0))
+        for row in rows
+    ]
+    return EligibilitySummaryResponse(metric_id=request.metric_id, action=request.action, by_period=points)

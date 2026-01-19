@@ -82,6 +82,24 @@ class EligibilityResponse(BaseModel):
     authors: List[EligibleEntity] = Field(default_factory=list)
 
 
+class EligibilitySummaryRequest(BaseModel):
+    metric_id: str
+    action: str
+    scope: MetricScope
+    options: Dict[str, Any] = Field(default_factory=dict)
+
+
+class EligibilitySummaryPoint(BaseModel):
+    period: str
+    eligible_count: int
+
+
+class EligibilitySummaryResponse(BaseModel):
+    metric_id: str
+    action: str
+    by_period: List[EligibilitySummaryPoint] = Field(default_factory=list)
+
+
 class MetricImpact(BaseModel):
     metric_id: str
     label: str

@@ -118,18 +118,18 @@ def snapshot_metric(session: Session, metric_id: str, scope) -> MetricSnapshot:
         "large_prs",
         "review_time",
         "cycle_time",
+        "delivery_lead_time",
         "deploy_time",
         "coding_time",
         "release_prs",
+        "deployment_frequency",
         "hotfix_prs",
+        "mttr",
     }:
         return _snapshot_pr_metrics(session, metric_id, scope, base["sql"], params)
 
     if metric_id in {"rework_pct", "newwork_pct", "maintenance_pct", "commit_frequency"}:
         return _snapshot_commit_metrics(session, metric_id, scope, base["sql"], params)
-
-    if metric_id == "mttr":
-        return _snapshot_change_metrics(session, scope)
 
     return MetricSnapshot(metric_id=metric_id, scope=scope, total_value=0, by_period=[])
 
@@ -177,6 +177,10 @@ def _snapshot_pr_metrics(session: Session, metric_id: str, scope, where_sql: str
         date_field = "mergedon"
         filter_sql = "state = 'MERGED'"
         value_expr = "AVG(cycletimeduration)"
+    elif metric_id == "delivery_lead_time":
+        date_field = "mergedon"
+        filter_sql = "state = 'MERGED' AND cycletimeduration IS NOT NULL AND mergetodeployduration IS NOT NULL"
+        value_expr = "AVG(cycletimeduration + mergetodeployduration)"
     elif metric_id == "deploy_time":
         date_field = "mergedon"
         filter_sql = "state = 'MERGED'"
@@ -189,10 +193,21 @@ def _snapshot_pr_metrics(session: Session, metric_id: str, scope, where_sql: str
         date_field = "mergedon"
         filter_sql = "state = 'MERGED' AND releasebranchpr = TRUE"
         value_expr = "COUNT(*)"
+    elif metric_id == "deployment_frequency":
+        date_field = "mergedon"
+        filter_sql = "state = 'MERGED'"
+        value_expr = (
+            "CASE WHEN COUNT(*) = 0 THEN 0 "
+            "ELSE SUM(CASE WHEN releasebranchpr = TRUE THEN 1 ELSE 0 END)::numeric / COUNT(*) END"
+        )
     elif metric_id == "hotfix_prs":
         date_field = "mergedon"
         filter_sql = "state = 'MERGED' AND hotfixpr = TRUE"
         value_expr = "COUNT(*)"
+    elif metric_id == "mttr":
+        date_field = "mergedon"
+        filter_sql = "state = 'MERGED' AND hotfixpr = TRUE AND cycletimeduration IS NOT NULL"
+        value_expr = "AVG(cycletimeduration)"
     else:
         return MetricSnapshot(metric_id=metric_id, scope=scope, total_value=0, by_period=[])
 

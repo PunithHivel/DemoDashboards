@@ -62,6 +62,44 @@ def _select_pr_ids(
     return [row[0] for row in rows]
 
 
+def _count_prs(
+    session: Session,
+    scope,
+    date_field: str,
+    start: date,
+    end: date,
+    extra_filters: List[str],
+    extra_params: Dict[str, Any] | None = None,
+) -> int:
+    where_sql, params = _filter_clauses(scope)
+    params.update({"start": start, "end": end})
+    if extra_params:
+        params.update(extra_params)
+    filters = [where_sql, f"{date_field} >= :start", f"{date_field} < :end"]
+    filters.extend(extra_filters)
+    query = f"SELECT COUNT(*) FROM insightly.pull_request WHERE {' AND '.join(filters)}"
+    return int(session.execute(text(query), params).scalar() or 0)
+
+
+def _max_expr(
+    session: Session,
+    scope,
+    start: date,
+    end: date,
+    expr: str,
+    extra_filters: List[str],
+    extra_params: Dict[str, Any] | None = None,
+) -> float:
+    where_sql, params = _filter_clauses(scope)
+    params.update({"start": start, "end": end})
+    if extra_params:
+        params.update(extra_params)
+    filters = [where_sql, "mergedon >= :start", "mergedon < :end"]
+    filters.extend(extra_filters)
+    query = f"SELECT MAX({expr}) FROM insightly.pull_request WHERE {' AND '.join(filters)}"
+    return float(session.execute(text(query), params).scalar() or 0)
+
+
 def plan_shift_open_prs(session: Session, request: MetricChangeRequest) -> ChangePlan:
     source_month = request.options.get("source_month")
     target_month = request.options.get("target_month")
@@ -74,6 +112,19 @@ def plan_shift_open_prs(session: Session, request: MetricChangeRequest) -> Chang
     source_start, source_end = _month_bounds(source_month)
     target_start, _ = _month_bounds(target_month)
     delta_days = (target_start - source_start).days
+    available = _count_prs(
+        session,
+        request.scope,
+        "createdon",
+        source_start,
+        source_end,
+        ["state = 'OPEN'"],
+    )
+    if available < count:
+        raise ValueError(
+            f"Only {available} OPEN PRs found in {source_month}. Reduce the count to {available} or less."
+        )
+
     ids = _select_pr_ids(
         session,
         request.scope,
@@ -143,6 +194,19 @@ def plan_shift_merged_prs(session: Session, request: MetricChangeRequest) -> Cha
     source_start, source_end = _month_bounds(source_month)
     target_start, _ = _month_bounds(target_month)
     delta_days = (target_start - source_start).days
+
+    available = _count_prs(
+        session,
+        request.scope,
+        "mergedon",
+        source_start,
+        source_end,
+        ["state = 'MERGED'"],
+    )
+    if available < count:
+        raise ValueError(
+            f"Only {available} MERGED PRs found in {source_month}. Reduce the count to {available} or less."
+        )
 
     ids = _select_pr_ids(
         session,
@@ -219,6 +283,73 @@ def plan_set_reviewed(session: Session, request: MetricChangeRequest, reviewed: 
     else:
         extra.append("approvedon IS NOT NULL")
 
+    reviewed_count = _count_prs(
+        session,
+        request.scope,
+        "mergedon",
+        start,
+        end,
+        ["state = 'MERGED'", "approvedon IS NOT NULL", "reviewbranchpr = TRUE"],
+    )
+    unreviewed_count = _count_prs(
+        session,
+        request.scope,
+        "mergedon",
+        start,
+        end,
+        ["state = 'MERGED'", "approvedon IS NULL", "reviewbranchpr = TRUE"],
+    )
+    flashy_count = _count_prs(
+        session,
+        request.scope,
+        "mergedon",
+        start,
+        end,
+        [
+            "state = 'MERGED'",
+            "reviewbranchpr = TRUE",
+            "approvedby IS NOT NULL",
+            "opentoreviewduration IS NOT NULL",
+            "opentoreviewduration < 5",
+            "(COALESCE(linesadded, 0) + COALESCE(linesremoved, 0)) > 400",
+        ],
+    )
+
+    if reviewed:
+        new_reviewed = reviewed_count + count
+        new_unreviewed = max(unreviewed_count - count, 0)
+    else:
+        new_reviewed = max(reviewed_count - count, 0)
+        new_unreviewed = unreviewed_count + count
+
+    if flashy_count > new_reviewed:
+        raise ValueError(
+            "Invalid change: flashy reviews would exceed reviewed PRs. "
+            f"Flashy={flashy_count}, reviewed after change={new_reviewed}."
+        )
+
+    available = _count_prs(
+        session,
+        request.scope,
+        "mergedon",
+        start,
+        end,
+        extra,
+    )
+    if reviewed and count > unreviewed_count:
+        raise ValueError(
+            f"Only {unreviewed_count} unreviewed PRs available to mark reviewed in {month_value}."
+        )
+    if not reviewed and count > reviewed_count:
+        raise ValueError(
+            f"Only {reviewed_count} reviewed PRs available to mark unreviewed in {month_value}."
+        )
+    if available < count:
+        state_label = "unreviewed" if reviewed else "reviewed"
+        raise ValueError(
+            f"Only {available} {state_label} PRs available in {month_value}. Reduce the count to {available} or less."
+        )
+
     ids = _select_pr_ids(
         session,
         request.scope,
@@ -227,7 +358,6 @@ def plan_set_reviewed(session: Session, request: MetricChangeRequest, reviewed: 
         end,
         extra,
         count,
-        extra_params={"threshold_lines": threshold_lines},
     )
     if not ids:
         raise ValueError("No matching PRs found for the requested review toggle")
@@ -343,7 +473,38 @@ def plan_set_flashy(session: Session, request: MetricChangeRequest, flashy: bool
         extra.append(f"(linesadded + linesremoved) > {size_threshold}")
         extra.append(f"opentoreviewduration < {flashy_minutes}")
 
-    ids = _select_pr_ids(session, request.scope, "mergedon", start, end, extra, count)
+    reviewed_count = _count_prs(
+        session,
+        request.scope,
+        "mergedon",
+        start,
+        end,
+        ["state = 'MERGED'", "approvedon IS NOT NULL", "reviewbranchpr = TRUE"],
+    )
+    if flashy and count > reviewed_count:
+        raise ValueError(
+            f"Flashy reviews cannot exceed reviewed PRs. "
+            f"Reviewed PRs in {month_value}: {reviewed_count}."
+        )
+
+    available = _count_prs(session, request.scope, "mergedon", start, end, extra)
+    if available < count:
+        label = "flashy" if flashy else "regular"
+        raise ValueError(
+            f"Only {available} eligible PRs found to mark as {label} in {month_value}. "
+            f"Reduce the count to {available} or less."
+        )
+
+    ids = _select_pr_ids(
+        session,
+        request.scope,
+        "mergedon",
+        start,
+        end,
+        extra,
+        count,
+        extra_params={"threshold_lines": threshold_lines},
+    )
     if not ids:
         raise ValueError("No matching PRs found for flashy toggle")
 
@@ -395,6 +556,47 @@ def plan_toggle_flag(session: Session, request: MetricChangeRequest, column: str
 
     start, end = _month_bounds(month_value)
     extra = ["state = 'MERGED'", f"{column} IS DISTINCT FROM :target_value"]
+    if column in {"hotfixpr", "releasebranchpr"}:
+        release_count = _count_prs(
+            session,
+            request.scope,
+            "mergedon",
+            start,
+            end,
+            ["state = 'MERGED'", "releasebranchpr = TRUE"],
+        )
+        hotfix_count = _count_prs(
+            session,
+            request.scope,
+            "mergedon",
+            start,
+            end,
+            ["state = 'MERGED'", "hotfixpr = TRUE"],
+        )
+
+        if column == "hotfixpr":
+            new_hotfix = hotfix_count + count if value else max(hotfix_count - count, 0)
+            if release_count == 0 and value:
+                raise ValueError("Cannot mark hotfix PRs without any release PRs in the period.")
+            if new_hotfix > release_count:
+                raise ValueError(
+                    "Invalid change: hotfix PRs cannot exceed release PRs. "
+                    f"Release PRs={release_count}, hotfix after change={new_hotfix}."
+                )
+        if column == "releasebranchpr" and not value:
+            new_release = max(release_count - count, 0)
+            if hotfix_count > new_release:
+                raise ValueError(
+                    "Invalid change: release PRs cannot be reduced below hotfix PRs. "
+                    f"Hotfix PRs={hotfix_count}, release after change={new_release}."
+                )
+    available = _count_prs(session, request.scope, "mergedon", start, end, extra)
+    if available < count:
+        raise ValueError(
+            f"Only {available} PRs available to update {column} in {month_value}. "
+            f"Reduce the count to {available} or less."
+        )
+
     ids = _select_pr_ids(session, request.scope, "mergedon", start, end, extra, count)
     if not ids:
         raise ValueError("No matching PRs found for flag toggle")
@@ -438,6 +640,22 @@ def plan_set_large_prs(session: Session, request: MetricChangeRequest, make_larg
             "state = 'MERGED'",
             "(COALESCE(linesadded, 0) + COALESCE(linesremoved, 0)) > :threshold_lines",
         ]
+
+    available = _count_prs(
+        session,
+        request.scope,
+        "mergedon",
+        start,
+        end,
+        extra,
+        extra_params={"threshold_lines": threshold_lines},
+    )
+    if available < count:
+        label = "large" if make_large else "small"
+        raise ValueError(
+            f"Only {available} PRs eligible to mark as {label} in {month_value}. "
+            f"Reduce the count to {available} or less."
+        )
 
     ids = _select_pr_ids(session, request.scope, "mergedon", start, end, extra, count)
     if not ids:

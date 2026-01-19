@@ -22,9 +22,11 @@
         "large_prs",
         "review_time",
         "cycle_time",
+        "delivery_lead_time",
         "deploy_time",
         "coding_time",
         "release_prs",
+        "deployment_frequency",
         "hotfix_prs"
       ],
       "actions": ["shift_merged_prs"]
@@ -74,8 +76,16 @@
       "label": "Cycle time (avg minutes)",
       "unit": "minutes",
       "source": "pull_request.cycletimeduration",
-      "affects": ["cycle_time", "large_prs"],
+      "affects": ["cycle_time", "large_prs", "delivery_lead_time"],
       "actions": ["scale_cycle_time"]
+    },
+    {
+      "id": "delivery_lead_time",
+      "label": "Delivery lead time (avg minutes)",
+      "unit": "minutes",
+      "source": "pull_request.cycletimeduration + pull_request.mergetodeployduration",
+      "affects": ["delivery_lead_time"],
+      "actions": []
     },
     {
       "id": "deploy_time",
@@ -98,8 +108,16 @@
       "label": "Release PRs (DF)",
       "unit": "count",
       "source": "pull_request.releasebranchpr",
-      "affects": ["release_prs"],
+      "affects": ["release_prs", "deployment_frequency"],
       "actions": ["toggle_release_prs"]
+    },
+    {
+      "id": "deployment_frequency",
+      "label": "Deployment frequency (release PRs / merged PRs)",
+      "unit": "ratio",
+      "source": "pull_request.releasebranchpr / pull_request.merged",
+      "affects": ["deployment_frequency"],
+      "actions": []
     },
     {
       "id": "hotfix_prs",
@@ -111,10 +129,10 @@
     },
     {
       "id": "mttr",
-      "label": "MTTR (avg minutes, change_requests)",
+      "label": "MTTR (avg minutes, hotfix PRs)",
       "unit": "minutes",
-      "source": "change_requests.duration",
-      "affects": ["mttr"],
+      "source": "pull_request.cycletimeduration (hotfix)",
+      "affects": ["mttr", "cycle_time", "delivery_lead_time"],
       "actions": ["scale_mttr_duration"]
     },
     {

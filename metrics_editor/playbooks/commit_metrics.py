@@ -62,6 +62,23 @@ def _select_commit_ids(
     return [row[0] for row in rows]
 
 
+def _count_commits(
+    session: Session,
+    scope,
+    start: date,
+    end: date,
+) -> int:
+    where_sql, params = _filter_clauses(scope)
+    params.update({"start": start, "end": end})
+    query = (
+        "SELECT COUNT(*) FROM insightly.commit "
+        "WHERE "
+        f"{where_sql} AND date >= :start AND date < :end "
+        "AND type = 'COMMIT'"
+    )
+    return int(session.execute(text(query), params).scalar() or 0)
+
+
 def plan_set_commit_mix(session: Session, request: MetricChangeRequest) -> ChangePlan:
     month_value = request.options.get("month")
     if not month_value:
@@ -73,6 +90,14 @@ def plan_set_commit_mix(session: Session, request: MetricChangeRequest) -> Chang
     total_pct = newwork_pct + rework_pct + maintenance_pct + assistance_pct
     if round(total_pct, 2) != 100.0:
         raise ValueError("Percentages must sum to 100")
+    for label, value in {
+        "newwork_pct": newwork_pct,
+        "rework_pct": rework_pct,
+        "maintenance_pct": maintenance_pct,
+        "assistance_pct": assistance_pct,
+    }.items():
+        if value < 0 or value > 100:
+            raise ValueError(f"{label} must be between 0 and 100")
 
     start, end = _month_bounds(month_value)
     where_sql, params = _filter_clauses(request.scope)
@@ -130,6 +155,12 @@ def plan_shift_commit_dates(session: Session, request: MetricChangeRequest) -> C
     source_start, source_end = _month_bounds(source_month)
     target_start, _ = _month_bounds(target_month)
     delta_days = (target_start - source_start).days
+    available = _count_commits(session, request.scope, source_start, source_end)
+    if available < count:
+        raise ValueError(
+            f"Only {available} commits found in {source_month}. Reduce the count to {available} or less."
+        )
+
     ids = _select_commit_ids(session, request.scope, source_start, source_end, count)
 
     if not ids:

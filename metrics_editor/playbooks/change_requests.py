@@ -30,7 +30,7 @@ def _month_bounds(month_value: str) -> Tuple[date, date]:
 
 
 def _filter_clauses(scope) -> Tuple[str, Dict[str, Any]]:
-    clauses = ["organization_id = :org_id"]
+    clauses = ["organizationid = :org_id"]
     params: Dict[str, Any] = {"org_id": scope.organization_id}
     if scope.repo_id is not None:
         clauses.append("repoid = :repo_id")
@@ -53,18 +53,26 @@ def plan_scale_mttr(session: Session, request: MetricChangeRequest) -> ChangePla
     where_sql, params = _filter_clauses(request.scope)
     params.update({"start": start, "end": end, "scale": scale})
 
-    summary = f"Scale change_requests.duration by {scale} for {month_value}"
+    count_query = f"""
+        SELECT COUNT(*) FROM insightly.pull_request
+        WHERE {where_sql}
+          AND state = 'MERGED'
+          AND hotfixpr = TRUE
+          AND mergedon >= :start AND mergedon < :end
+    """
+    hotfix_count = int(session.execute(text(count_query), params).scalar() or 0)
+    if hotfix_count == 0:
+        raise ValueError("No hotfix PRs found for the selected month.")
+
+    summary = f"Scale pull_request.cycletimeduration for hotfix PRs by {scale} in {month_value}"
     sql = [
         """
-        UPDATE insightly.change_requests
-        SET duration = ROUND(COALESCE(duration, 0) * :scale),
-            start_date = CASE
-                WHEN end_date IS NOT NULL THEN end_date - (INTERVAL '1 minute' * ROUND(COALESCE(duration, 0) * :scale))
-                ELSE start_date
-            END,
-            modifieddate = NOW()
+        UPDATE insightly.pull_request
+        SET cycletimeduration = ROUND(COALESCE(cycletimeduration, 0) * :scale)
         WHERE {where_sql}
-          AND start_date >= :start AND start_date < :end;
+          AND state = 'MERGED'
+          AND hotfixpr = TRUE
+          AND mergedon >= :start AND mergedon < :end;
         """.replace("{where_sql}", where_sql)
     ]
 
@@ -74,5 +82,5 @@ def plan_scale_mttr(session: Session, request: MetricChangeRequest) -> ChangePla
         sql_statements=[s.strip() for s in sql],
         sql_params=[params],
         before_rows=[],
-        expected={"updated_change_requests": "all in range"},
+        expected={"updated_hotfix_prs": "all in range"},
     )

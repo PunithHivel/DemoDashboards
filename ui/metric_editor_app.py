@@ -16,6 +16,7 @@ APPLY_ENDPOINT = f"{API_URL}/metrics-editor/apply"
 HISTORY_ENDPOINT = f"{API_URL}/metrics-editor/history"
 REPO_LIST_ENDPOINT = f"{API_URL}/repo/list"
 ELIGIBLE_ENDPOINT = f"{API_URL}/metrics-editor/eligible"
+ELIGIBLE_SUMMARY_ENDPOINT = f"{API_URL}/metrics-editor/eligible-summary"
 
 st.set_page_config(page_title="Metrics Editor", layout="wide")
 st.title("Metrics Editor")
@@ -45,10 +46,40 @@ def fetch_eligible(payload: Dict[str, Any]) -> Dict[str, Any]:
         resp = requests.post(ELIGIBLE_ENDPOINT, json=payload, timeout=30)
         if resp.ok:
             return resp.json()
-        st.error(f"Eligible lookup failed: {resp.status_code} {resp.text}")
+        detail = None
+        try:
+            detail = resp.json().get("detail")
+        except Exception:
+            detail = None
+        st.error(detail or "Eligible lookup failed. Please review filters and try again.")
     except Exception as exc:
         st.error(f"Failed to load eligible scopes: {exc}")
     return {"repos": [], "teams": [], "authors": []}
+
+
+def fetch_eligible_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        resp = requests.post(ELIGIBLE_SUMMARY_ENDPOINT, json=payload, timeout=30)
+        if resp.ok:
+            return resp.json()
+        detail = None
+        try:
+            detail = resp.json().get("detail")
+        except Exception:
+            detail = None
+        st.error(detail or "Eligible summary lookup failed.")
+    except Exception as exc:
+        st.error(f"Failed to load eligible summary: {exc}")
+    return {"by_period": []}
+
+
+def show_api_error(resp: requests.Response) -> None:
+    detail = None
+    try:
+        detail = resp.json().get("detail")
+    except Exception:
+        detail = None
+    st.error(detail or "Request failed. Please review inputs and try again.")
 
 
 def format_metric_snapshot(snapshot: Dict[str, Any]) -> pd.DataFrame:
@@ -133,7 +164,10 @@ with st.sidebar:
         if team_filter_selection.get("id") != st.session_state.get("team_filter"):
             st.session_state["team_filter"] = team_filter_selection.get("id")
             filters = st.session_state["filters"]
-            filters["team_id"] = team_filter_selection.get("id")
+            if team_filter_selection.get("id") is None:
+                filters.pop("team_id", None)
+            else:
+                filters["team_id"] = team_filter_selection.get("id")
             refreshed = fetch_eligible(filters)
             st.session_state["eligible"] = refreshed
             eligible = refreshed
@@ -151,11 +185,16 @@ with st.sidebar:
                 format_func=lambda item: item.get("label") or f"{item.get('id')} ({item.get('count', 0)})",
             )
             selected_author_id = author_selection.get("id")
-            st.session_state["author_filter"] = selected_author_id
-            if selected_author_id is not None:
+            if selected_author_id != st.session_state.get("author_filter"):
+                st.session_state["author_filter"] = selected_author_id
                 filters = st.session_state["filters"]
-                filters["author_ids"] = [selected_author_id]
-                st.session_state["filters"] = filters
+                if selected_author_id is None:
+                    filters.pop("author_ids", None)
+                else:
+                    filters["author_ids"] = [selected_author_id]
+                refreshed = fetch_eligible(filters)
+                st.session_state["eligible"] = refreshed
+                eligible = refreshed
         if scope_type == "Team":
             if team_filter_selection.get("id") is None:
                 st.warning("Select a team to continue for Team scope.")
@@ -202,9 +241,17 @@ with st.expander("Eligible coverage"):
     if eligible.get("repos"):
         st.dataframe(pd.DataFrame(eligible["repos"]), width="stretch")
     if eligible.get("teams"):
-        st.dataframe(pd.DataFrame(eligible["teams"]), width="stretch")
+        if team_id is not None:
+            st.dataframe(pd.DataFrame([t for t in eligible["teams"] if t.get("id") == team_id]), width="stretch")
+        else:
+            st.dataframe(pd.DataFrame(eligible["teams"]), width="stretch")
     if eligible.get("authors"):
-        st.dataframe(pd.DataFrame(eligible["authors"]), width="stretch")
+        if author_ids:
+            st.dataframe(
+                pd.DataFrame([a for a in eligible["authors"] if a.get("id") in author_ids]), width="stretch"
+            )
+        else:
+            st.dataframe(pd.DataFrame(eligible["authors"]), width="stretch")
 
 team_id: Optional[int] = filters.get("team_id")
 author_ids: Optional[List[int]] = filters.get("author_ids")
@@ -229,14 +276,17 @@ else:
 
 st.subheader("Step 3: Change request")
 options: Dict[str, Any] = {}
+show_summary = False
 if action in {"shift_open_prs", "shift_merged_prs", "shift_commit_dates"}:
     options["source_month"] = st.text_input("Source month (YYYY-MM)")
     options["target_month"] = st.text_input("Target month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=10, step=1)
+    show_summary = True
 elif action in {"set_reviewed_count", "set_unreviewed_count"}:
     options["month"] = st.text_input("Month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=10, step=1)
     options["review_minutes"] = st.number_input("Review minutes", min_value=1, value=180, step=10)
+    show_summary = True
 elif action == "set_flashy_reviews":
     options["month"] = st.text_input("Month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=10, step=1)
@@ -244,10 +294,12 @@ elif action == "set_flashy_reviews":
     options["flashy_minutes"] = st.number_input("Flashy minutes (<)", min_value=1, value=5, step=1)
     options["size_threshold"] = st.number_input("Large PR threshold (lines)", min_value=1, value=400, step=10)
     options["regular_minutes"] = st.number_input("Regular minutes", min_value=1, value=180, step=10)
+    show_summary = True
 elif action in {"toggle_release_prs", "toggle_hotfix_prs"}:
     options["month"] = st.text_input("Month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=5, step=1)
     options["value"] = st.checkbox("Set to TRUE", value=True)
+    show_summary = True
 elif action == "set_large_prs":
     options["month"] = st.text_input("Month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=10, step=1)
@@ -255,15 +307,18 @@ elif action == "set_large_prs":
     options["threshold_lines"] = st.number_input("Large threshold (lines)", min_value=1, value=400, step=10)
     options["target_lines"] = st.number_input("Target total lines", min_value=1, value=500, step=10)
     options["added_ratio"] = st.number_input("Added ratio (0-1)", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
+    show_summary = True
 elif action in {"scale_review_time", "scale_cycle_time", "scale_deploy_time", "scale_coding_time", "scale_mttr_duration"}:
     options["month"] = st.text_input("Month (YYYY-MM)")
     options["scale"] = st.number_input("Scale", min_value=0.1, value=1.2, step=0.1)
+    show_summary = True
 elif action == "set_commit_mix":
     options["month"] = st.text_input("Month (YYYY-MM)")
     options["newwork_pct"] = st.number_input("New work %", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
     options["rework_pct"] = st.number_input("Rework %", min_value=0.0, max_value=100.0, value=15.0, step=1.0)
     options["maintenance_pct"] = st.number_input("Maintenance %", min_value=0.0, max_value=100.0, value=10.0, step=1.0)
     options["assistance_pct"] = st.number_input("Assistance %", min_value=0.0, max_value=100.0, value=5.0, step=1.0)
+    show_summary = True
 
 scope_payload = {
     "organization_id": filters["organization_id"],
@@ -273,6 +328,20 @@ scope_payload = {
     "start_date": filters["start_date"],
     "end_date": filters["end_date"],
 }
+
+if show_summary:
+    summary_payload = {
+        "metric_id": selected_metric["id"],
+        "action": action,
+        "scope": scope_payload,
+        "options": options,
+    }
+    summary = fetch_eligible_summary(summary_payload)
+    if summary.get("by_period"):
+        st.subheader("Eligible counts by month")
+        st.dataframe(pd.DataFrame(summary["by_period"]), use_container_width=True)
+    else:
+        st.info("No eligible records found for the selected filters.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -293,7 +362,7 @@ with col1:
                 if resp.ok:
                     st.session_state["impact"] = resp.json()
                 else:
-                    st.error(f"Error: {resp.status_code}\n{resp.text}")
+                    show_api_error(resp)
 
 with col2:
     if st.button("Apply change"):
@@ -313,7 +382,7 @@ with col2:
                 if resp.ok:
                     st.session_state["apply"] = resp.json()
                 else:
-                    st.error(f"Error: {resp.status_code}\n{resp.text}")
+                    show_api_error(resp)
 
 st.subheader("Current snapshot")
 current_payload = {"metric_id": selected_metric["id"], "scope": scope_payload}
@@ -323,7 +392,7 @@ if current_resp.ok:
     snapshot_df = format_metric_snapshot(snapshot)
     st.dataframe(snapshot_df, use_container_width=True)
 else:
-    st.error(current_resp.text)
+    show_api_error(current_resp)
 
 if "impact" in st.session_state:
     st.subheader("Impact summary")

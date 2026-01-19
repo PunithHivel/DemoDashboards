@@ -9,11 +9,13 @@ from sqlalchemy.orm import Session
 from db.session import get_db_session
 from metrics_editor.catalog import load_catalog
 from metrics_editor.engine import build_plan, preview_after, preview_impact, snapshot_metric, get_affected_metric_ids
-from metrics_editor.eligibility import get_eligible_entities
+from metrics_editor.eligibility import get_eligible_entities, get_eligible_summary
 from metrics_editor.models import (
     ChangeResult,
     EligibilityRequest,
     EligibilityResponse,
+    EligibilitySummaryRequest,
+    EligibilitySummaryResponse,
     ImpactResponse,
     MetricChangeRequest,
     MetricImpact,
@@ -74,9 +76,7 @@ def preview_change(
             request.scope.author_ids = [author["id"] for author in authors]
         plan = build_plan(session, request)
     except Exception as exc:
-        import traceback
-        error_msg = f"{str(exc)}\n{traceback.format_exc()}"
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     # Use dict() for Pydantic v1 or model_dump() for Pydantic v2
     if hasattr(plan, 'model_dump'):
@@ -101,10 +101,7 @@ def preview_impact_change(
         after = preview_after(session, request, plan)
         catalog = load_catalog()
     except Exception as exc:
-        import traceback
-
-        error_msg = f"{str(exc)}\n{traceback.format_exc()}"
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     impacts = []
     for metric_id in get_affected_metric_ids(request.metric_id):
@@ -195,5 +192,21 @@ def get_eligible(
             if info:
                 repo.label = f"{info['id']} - {info.get('name') or info.get('slug') or ''}".strip()
         return eligible
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/eligible-summary", response_model=EligibilitySummaryResponse)
+def get_eligible_summary_endpoint(
+    request: EligibilitySummaryRequest,
+    session: Session = Depends(get_db_session),
+) -> EligibilitySummaryResponse:
+    try:
+        if request.scope.team_id and not request.scope.author_ids:
+            authors = _lookup_repository.list_team_authors(
+                session, request.scope.organization_id, request.scope.team_id
+            )
+            request.scope.author_ids = [author["id"] for author in authors]
+        return get_eligible_summary(session, request)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

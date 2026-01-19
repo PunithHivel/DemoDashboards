@@ -1,0 +1,62 @@
+{
+  "plan_id": "c77353e7dcff4116af9faf3a962fa899",
+  "summary": "Shift 1 OPEN PRs from 2025-12 to 2025-10",
+  "sql_statements": [
+    "UPDATE insightly.pull_request\n        SET createdon = createdon + (INTERVAL '1 day' * :delta_days),\n            updatedon = CASE WHEN updatedon IS NOT NULL THEN updatedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,\n            createddate = createddate + (INTERVAL '1 day' * :delta_days),\n            modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)\n        WHERE id = ANY(:ids);",
+    "UPDATE insightly.pr_reviewer\n        SET approveddate = CASE WHEN approveddate IS NOT NULL THEN approveddate + (INTERVAL '1 day' * :delta_days) ELSE NULL END,\n            createddate = createddate + (INTERVAL '1 day' * :delta_days),\n            modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)\n        WHERE pullrequestid = ANY(:ids);",
+    "UPDATE insightly.pr_update\n        SET date = date + (INTERVAL '1 day' * :delta_days),\n            createddate = createddate + (INTERVAL '1 day' * :delta_days),\n            modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)\n        WHERE pullrequestid = ANY(:ids);",
+    "UPDATE insightly.pr_comment\n        SET createdon = createdon + (INTERVAL '1 day' * :delta_days),\n            createddate = createddate + (INTERVAL '1 day' * :delta_days),\n            modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)\n        WHERE pullrequestid = ANY(:ids);"
+  ],
+  "sql_params": [
+    {
+      "ids": [
+        609841
+      ],
+      "delta_days": -61
+    },
+    {
+      "ids": [
+        609841
+      ],
+      "delta_days": -61
+    },
+    {
+      "ids": [
+        609841
+      ],
+      "delta_days": -61
+    },
+    {
+      "ids": [
+        609841
+      ],
+      "delta_days": -61
+    }
+  ],
+  "before_rows": [],
+  "expected": {
+    "shifted_prs": 1
+  },
+  "warnings": [],
+  "request": {
+    "metric_id": "pr_opened",
+    "action": "shift_open_prs",
+    "scope": {
+      "organization_id": 2162,
+      "repo_id": null,
+      "team_id": 8578,
+      "author_ids": [
+        131181,
+        131198
+      ],
+      "start_date": "2025-10-01",
+      "end_date": "2026-01-01"
+    },
+    "target": null,
+    "options": {
+      "source_month": "2025-12",
+      "target_month": "2025-10",
+      "count": 1
+    }
+  }
+}
