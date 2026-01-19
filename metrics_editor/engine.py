@@ -45,6 +45,7 @@ def _build_plan_with_ai(session: Session, request: MetricChangeRequest) -> Chang
     from metrics_editor.data_fetcher import DataFetcher
     
     print(f"[AI] Fetching filtered data for {request.metric_id}/{request.action}")
+    print(f"[AI] Request options: {request.options}")
     
     # Fetch filtered data
     fetcher = DataFetcher(session)
@@ -53,7 +54,7 @@ def _build_plan_with_ai(session: Session, request: MetricChangeRequest) -> Chang
     constraints = fetcher.get_constraints(request.metric_id, request.action)
     
     print(f"[AI] Filtered data: {len(filtered_data)} records")
-    print(f"[AI] Calling OpenAI API...")
+    print(f"[AI] Calling OpenAI API with count={request.options.get('count', 'NOT SET')}...")
     
     # Call AI service
     ai_service = AIMetricService()
@@ -66,11 +67,39 @@ def _build_plan_with_ai(session: Session, request: MetricChangeRequest) -> Chang
         constraints=constraints,
     )
     
-    print(f"[AI] AI returned plan with {len(ai_result.get('selected_record_ids', []))} selected records")
-    print(f"[AI] AI reasoning: {ai_result.get('reasoning', 'N/A')[:100]}...")
+    selected_ids = ai_result.get('selected_record_ids', [])
+    print(f"[AI] AI returned plan with {len(selected_ids)} selected records")
+    print(f"[AI] Selected IDs: {selected_ids[:10]}{'...' if len(selected_ids) > 10 else ''}")
+    print(f"[AI] AI reasoning: {ai_result.get('reasoning', 'N/A')[:200]}...")
+    print(f"[AI] Full AI result keys: {list(ai_result.keys())}")
     
     # Convert AI result to ChangePlan
-    return _ai_result_to_change_plan(session, request, ai_result)
+    plan = _ai_result_to_change_plan(session, request, ai_result)
+
+    # Validate constraints in a transaction before returning
+    try:
+        from metrics_editor.validators import MetricValidator
+
+        validator = MetricValidator(session)
+        affected_metrics = get_affected_metric_ids(request.metric_id)
+        is_valid, errors = validator.validate_in_transaction(
+            plan.sql_statements,
+            plan.sql_params,
+            affected_metrics,
+            {
+                "organization_id": request.scope.organization_id,
+                "repo_id": request.scope.repo_id,
+                "author_ids": request.scope.author_ids,
+                "start_date": request.scope.start_date,
+                "end_date": request.scope.end_date,
+            },
+        )
+        if not is_valid:
+            raise ValueError("Constraint validation failed:\n" + "\n".join(f"- {e}" for e in errors))
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
+
+    return plan
 
 
 def _ai_result_to_change_plan(
@@ -85,6 +114,7 @@ def _ai_result_to_change_plan(
     selected_ids = ai_result.get("selected_record_ids", [])
     field_updates = ai_result.get("field_updates", {})
     reasoning = ai_result.get("reasoning", "AI-generated plan")
+    org_id = request.scope.organization_id
     
     # Build SQL based on action and AI's selections
     if action == "set_reviewed_count":
@@ -96,13 +126,29 @@ def _ai_result_to_change_plan(
                 approvedby = authorid,
                 opentoreviewduration = :review_minutes,
                 reviewbranchpr = TRUE
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
+            """,
             """
+            UPDATE insightly.pr_reviewer
+            SET approved = TRUE,
+                approveddate = (SELECT approvedon FROM insightly.pull_request WHERE id = pullrequestid)
+            WHERE pullrequestid = ANY(:ids) AND organizationid = :org_id;
+            """,
+            """
+            INSERT INTO insightly.pr_reviewer (organizationid, pullrequestid, authorid, approved, approveddate)
+            SELECT pr.organizationid, pr.id, pr.authorid, TRUE, pr.approvedon
+            FROM insightly.pull_request pr
+            WHERE pr.id = ANY(:ids)
+              AND NOT EXISTS (
+                SELECT 1 FROM insightly.pr_reviewer prr WHERE prr.pullrequestid = pr.id
+              );
+            """,
         ]
         params = [{
             "ids": selected_ids,
             "review_minutes": request.options.get("review_minutes", 180),
-        }]
+            "org_id": org_id,
+        }] * len(sql_statements)
     
     elif action == "set_unreviewed_count":
         # Mark selected PRs as unreviewed
@@ -113,10 +159,16 @@ def _ai_result_to_change_plan(
                 approvedby = NULL,
                 opentoreviewduration = NULL,
                 reviewbranchpr = TRUE
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
+            """,
             """
+            UPDATE insightly.pr_reviewer
+            SET approved = FALSE,
+                approveddate = NULL
+            WHERE pullrequestid = ANY(:ids) AND organizationid = :org_id;
+            """,
         ]
-        params = [{"ids": selected_ids}]
+        params = [{"ids": selected_ids, "org_id": org_id}] * len(sql_statements)
     
     elif action == "set_flashy_reviews":
         # Mark selected PRs as flashy
@@ -129,10 +181,25 @@ def _ai_result_to_change_plan(
                 reviewbranchpr = TRUE,
                 approvedby = COALESCE(approvedby, authorid),
                 approvedon = createdon + (INTERVAL '1 minute' * :flashy_minutes)
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
+            """,
             """
+            UPDATE insightly.pr_reviewer
+            SET approved = TRUE,
+                approveddate = (SELECT approvedon FROM insightly.pull_request WHERE id = pullrequestid)
+            WHERE pullrequestid = ANY(:ids) AND organizationid = :org_id;
+            """,
+            """
+            INSERT INTO insightly.pr_reviewer (organizationid, pullrequestid, authorid, approved, approveddate)
+            SELECT pr.organizationid, pr.id, pr.authorid, TRUE, pr.approvedon
+            FROM insightly.pull_request pr
+            WHERE pr.id = ANY(:ids)
+              AND NOT EXISTS (
+                SELECT 1 FROM insightly.pr_reviewer prr WHERE prr.pullrequestid = pr.id
+              );
+            """,
         ]
-        params = [{"ids": selected_ids, "flashy_minutes": flashy_minutes}]
+        params = [{"ids": selected_ids, "flashy_minutes": flashy_minutes, "org_id": org_id}] * len(sql_statements)
     
     elif action == "set_large_prs":
         # Update PR size
@@ -146,13 +213,14 @@ def _ai_result_to_change_plan(
             UPDATE insightly.pull_request
             SET linesadded = :lines_added,
                 linesremoved = :lines_removed
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
             """
         ]
         params = [{
             "ids": selected_ids,
             "lines_added": lines_added,
             "lines_removed": lines_removed,
+            "org_id": org_id,
         }]
     
     elif action in ["toggle_release_prs", "toggle_hotfix_prs"]:
@@ -163,48 +231,61 @@ def _ai_result_to_change_plan(
             f"""
             UPDATE insightly.pull_request
             SET {column} = :value
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
             """
         ]
-        params = [{"ids": selected_ids, "value": value}]
+        params = [{"ids": selected_ids, "value": value, "org_id": org_id}]
     
     elif action in ["shift_open_prs", "shift_merged_prs"]:
         # Shift PRs to different month
-        date_field = "createdon" if action == "shift_open_prs" else "mergedon"
         target_month = request.options.get("target_month")
         source_month = request.options.get("source_month")
-        
-        # Calculate delta days (AI should provide this, but we can calculate)
-        from datetime import date as dt
-        target_date = dt.fromisoformat(target_month + "-01")
-        source_date = dt.fromisoformat(source_month + "-01")
-        delta_days = (target_date - source_date).days
-        
-        # Build SET clause - avoid duplicate assignments
-        if action == "shift_open_prs":
-            set_clause = """
-                createdon = createdon + (INTERVAL '1 day' * :delta_days),
-                updatedon = CASE WHEN updatedon IS NOT NULL THEN updatedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
-                createddate = createddate + (INTERVAL '1 day' * :delta_days),
-                modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)
-            """
-        else:  # shift_merged_prs
-            set_clause = """
-                mergedon = mergedon + (INTERVAL '1 day' * :delta_days),
-                createdon = createdon + (INTERVAL '1 day' * :delta_days),
-                updatedon = CASE WHEN updatedon IS NOT NULL THEN updatedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
-                createddate = createddate + (INTERVAL '1 day' * :delta_days),
-                modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)
-            """
-        
+        delta_days = ai_result.get("delta_days")
+        if delta_days is None:
+            from datetime import date as dt
+            target_date = dt.fromisoformat(target_month + "-01")
+            source_date = dt.fromisoformat(source_month + "-01")
+            delta_days = (target_date - source_date).days
+
+        set_clause = """
+            createdon = createdon + (INTERVAL '1 day' * :delta_days),
+            approvedon = CASE WHEN approvedon IS NOT NULL THEN approvedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
+            mergedon = CASE WHEN mergedon IS NOT NULL THEN mergedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
+            firstcommittedon = CASE WHEN firstcommittedon IS NOT NULL THEN firstcommittedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
+            reviewedon = CASE WHEN reviewedon IS NOT NULL THEN reviewedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
+            updatedon = CASE WHEN updatedon IS NOT NULL THEN updatedon + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
+            createddate = createddate + (INTERVAL '1 day' * :delta_days),
+            modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)
+        """
         sql_statements = [
             f"""
             UPDATE insightly.pull_request
             SET {set_clause}
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
+            """,
             """
+            UPDATE insightly.pr_reviewer
+            SET approveddate = CASE WHEN approveddate IS NOT NULL THEN approveddate + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
+                createddate = createddate + (INTERVAL '1 day' * :delta_days),
+                modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)
+            WHERE pullrequestid = ANY(:ids) AND organizationid = :org_id;
+            """,
+            """
+            UPDATE insightly.pr_update
+            SET date = date + (INTERVAL '1 day' * :delta_days),
+                createddate = createddate + (INTERVAL '1 day' * :delta_days),
+                modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)
+            WHERE pullrequestid = ANY(:ids) AND organizationid = :org_id;
+            """,
+            """
+            UPDATE insightly.pr_comment
+            SET createdon = createdon + (INTERVAL '1 day' * :delta_days),
+                createddate = createddate + (INTERVAL '1 day' * :delta_days),
+                modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)
+            WHERE pullrequestid = ANY(:ids) AND organizationid = :org_id;
+            """,
         ]
-        params = [{"ids": selected_ids, "delta_days": delta_days}]
+        params = [{"ids": selected_ids, "delta_days": delta_days, "org_id": org_id}] * len(sql_statements)
     
     elif action in ["scale_review_time", "scale_cycle_time", "scale_deploy_time", "scale_coding_time"]:
         # Scale duration fields
@@ -221,10 +302,10 @@ def _ai_result_to_change_plan(
             f"""
             UPDATE insightly.pull_request
             SET {column} = ROUND(COALESCE({column}, 0) * :scale)
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
             """
         ]
-        params = [{"ids": selected_ids, "scale": scale}]
+        params = [{"ids": selected_ids, "scale": scale, "org_id": org_id}]
     
     elif action == "set_commit_mix":
         # Update commit work mix
@@ -257,6 +338,7 @@ def _ai_result_to_change_plan(
             "newwork_pct": newwork_pct,
             "rework_pct": rework_pct,
             "maintenance_pct": maintenance_pct,
+            "org_id": org_id,
         }]
     
     elif action == "shift_commit_dates":
@@ -275,16 +357,27 @@ def _ai_result_to_change_plan(
             SET date = date + (INTERVAL '1 day' * :delta_days),
                 createddate = CASE WHEN createddate IS NOT NULL THEN createddate + (INTERVAL '1 day' * :delta_days) ELSE NULL END,
                 modifieddate = CASE WHEN modifieddate IS NOT NULL THEN modifieddate + (INTERVAL '1 day' * :delta_days) ELSE NULL END
-            WHERE id = ANY(:ids);
+            WHERE id = ANY(:ids) AND organizationid = :org_id;
+            """,
             """
+            UPDATE insightly.commit_files
+            SET createddate = createddate + (INTERVAL '1 day' * :delta_days),
+                modifieddate = modifieddate + (INTERVAL '1 day' * :delta_days)
+            WHERE commitid = ANY(:ids) AND organizationid = :org_id;
+            """,
         ]
-        params = [{"ids": selected_ids, "delta_days": delta_days}]
+        params = [{"ids": selected_ids, "delta_days": delta_days, "org_id": org_id}] * len(sql_statements)
     
     else:
         raise ValueError(f"AI planning not implemented for action: {action}")
     
     print(f"[AI] Built SQL plan with {len(sql_statements)} statements")
     
+    warnings = [f"AI selected {len(selected_ids)} records"]
+    validation_notes = ai_result.get("validation_notes") or []
+    if isinstance(validation_notes, list):
+        warnings.extend([str(note) for note in validation_notes if note])
+
     return ChangePlan(
         plan_id=create_plan_id(),
         summary=f"{reasoning} (AI-assisted)",
@@ -292,7 +385,7 @@ def _ai_result_to_change_plan(
         sql_params=params,
         before_rows=[],
         expected={"updated_records": len(selected_ids)},
-        warnings=[f"AI selected {len(selected_ids)} records"],
+        warnings=warnings,
     )
 
 

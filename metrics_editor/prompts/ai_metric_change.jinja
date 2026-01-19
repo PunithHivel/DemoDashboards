@@ -13,6 +13,9 @@
 
 ## All Available Records
 You are receiving ALL {{ total_records }} filtered records below. Analyze them completely.
+Each record may include related-table counts:
+- pr_update_count, pr_comment_count, pr_reviewer_count (for PRs)
+- commit_files_count (for commits)
 
 ```json
 {{ all_records | tojson(indent=2) }}
@@ -20,6 +23,9 @@ You are receiving ALL {{ total_records }} filtered records below. Analyze them c
 
 ## Metric Formulas
 {{ metric_formulas }}
+
+## Full Metrics Reference (Formulas + Constraints)
+{{ metrics_reference }}
 
 ## Constraints to Preserve
 {{ constraints }}
@@ -38,9 +44,11 @@ You have been given ALL {{ total_records }} filtered records above. Analyze them
 **Shifting PRs to a different month:**
 - Target month: {{ options.target_month }}
 - Source month: {{ options.source_month }}
+- **Target count: {{ options.count }}** - Select EXACTLY {{ options.count }} PRs
 - Select PRs that are currently in the source month
 - These will be shifted to the target month
 - Consider the PR state and dates when selecting
+- If there are fewer than {{ options.count }} PRs available, select all available PRs and note this in validation_notes
 {% elif action == "set_reviewed_count" %}
 **Setting reviewed PR count:**
 - Target count: {{ options.count }}
@@ -70,20 +78,31 @@ You have been given ALL {{ total_records }} filtered records above. Analyze them
 - Rework: {{ options.rework_pct }}%
 - Maintenance: {{ options.maintenance_pct }}%
 - Assistance: {{ options.assistance_pct }}%
+{% if options.count %}
+- **Target count: {{ options.count }}** - Select EXACTLY {{ options.count }} commits
+{% endif %}
 - Select commits to adjust their work type distribution
 {% elif action == "shift_commit_dates" %}
 **Shifting commits to a different month:**
 - Target month: {{ options.target_month }}
 - Source month: {{ options.source_month }}
+- **Target count: {{ options.count }}** - Select EXACTLY {{ options.count }} commits
 - Select commits from the source month to shift to target month
+- If there are fewer than {{ options.count }} commits available, select all available commits and note this in validation_notes
 {% elif action.startswith("scale_") %}
 **Scaling duration metric:**
 - Scale factor: {{ options.scale }}
+{% if options.count %}
+- **Target count: {{ options.count }}** - Select EXACTLY {{ options.count }} records
+{% endif %}
 - Select records where the duration should be scaled
 - Consider which records make sense to adjust
 {% elif action.startswith("toggle_") %}
 **Toggling PR flag:**
 - Value: {{ options.value }}
+{% if options.count %}
+- **Target count: {{ options.count }}** - Select EXACTLY {{ options.count }} PRs
+{% endif %}
 - Select PRs that should have this flag set/unset
 {% endif %}
 
@@ -94,8 +113,11 @@ You have been given ALL {{ total_records }} filtered records above. Analyze them
 3. **If user asks for N records**, select exactly N (or explain why less/more)
 4. **Respect all constraints** provided above
 5. **Ensure metric dependencies** will be preserved after changes
-6. **Provide clear reasoning** - explain which records you selected and why
-7. **Note any potential issues** or warnings about the changes
+6. **If changing PRs or commits, include related-table updates**:
+   - PR changes must update: pr_reviewer, pr_update, pr_comment (when applicable)
+   - Commit changes must update: commit_files
+7. **Provide clear reasoning** - explain which records you selected and why
+8. **Note any potential issues** or warnings about the changes
 
 ### Response Format
 

@@ -35,6 +35,7 @@ class AIMetricService:
         template_dir = Path(__file__).parent / "prompts"
         self.jinja_env = Environment(loader=FileSystemLoader(str(template_dir)))
         self.prompt_template = self.jinja_env.get_template("ai_metric_change.jinja")
+        self.metrics_reference = (Path(__file__).parents[1] / "metrics_reference.jinja").read_text(encoding="utf-8")
     
     def generate_change_plan(
         self,
@@ -73,6 +74,13 @@ class AIMetricService:
             constraints,
         )
         
+        # Debug: Log key parts of the prompt
+        print(f"[AI Service] Sending to OpenAI:")
+        print(f"  - Action: {action}")
+        print(f"  - Options: {options}")
+        print(f"  - Total records: {len(filtered_data)}")
+        print(f"  - Prompt length: {len(prompt)} chars")
+        
         # Call OpenAI
         response = self.openai_client.chat.completions.create(
             model="gpt-4o-mini",
@@ -93,6 +101,11 @@ class AIMetricService:
         # Parse response
         content = response.choices[0].message.content
         result = json.loads(content)
+        
+        # Debug: Log AI response
+        print(f"[AI Service] Received from OpenAI:")
+        print(f"  - Selected records: {len(result.get('selected_record_ids', []))}")
+        print(f"  - Reasoning preview: {result.get('reasoning', 'N/A')[:150]}...")
         
         return result
     
@@ -158,6 +171,7 @@ Important rules:
             total_records=len(filtered_data),
             metric_formulas=self._format_metric_formulas(metric_formulas),
             constraints=self._format_constraints(constraints),
+            metrics_reference=self.metrics_reference,
         )
         
         return prompt
@@ -209,12 +223,14 @@ Important rules:
         """Format ALL records for the prompt, converting datetime objects to strings and keeping only essential fields."""
         # Essential fields that are always needed
         essential_fields = {
-            'id', 'createdon', 'state', 'authorid', 'repositoryid',
+            'id', 'createdon', 'state', 'authorid', 'repoid',
             'approvedon', 'approvedby', 'mergedon', 'updatedon',
             'linesadded', 'linesremoved', 'opentoreviewduration',
             'cycletimeduration', 'deploytimeduration', 'committoopenduration',
             'releasebranchpr', 'hotfixpr', 'flashyreviewedpr', 'reviewbranchpr',
-            'date', 'newwork', 'rework', 'maintenance', 'assistance'
+            'date', 'newwork', 'rework', 'maintenance', 'assistance',
+            'pr_update_count', 'pr_comment_count', 'pr_reviewer_count',
+            'commit_files_count',
         }
         
         return [self._serialize_record(record, essential_fields) for record in filtered_data]

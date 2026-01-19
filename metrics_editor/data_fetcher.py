@@ -68,6 +68,9 @@ class DataFetcher:
             "cycletimeduration", "deploytimeduration", "committoopenduration",
             "releasebranchpr", "hotfixpr", "reviewbranchpr", "flashyreviewedpr",
             "authorid", "repoid", "approvedby",
+            "(SELECT COUNT(*) FROM insightly.pr_update pu WHERE pu.pullrequestid = insightly.pull_request.id) AS pr_update_count",
+            "(SELECT COUNT(*) FROM insightly.pr_comment pc WHERE pc.pullrequestid = insightly.pull_request.id) AS pr_comment_count",
+            "(SELECT COUNT(*) FROM insightly.pr_reviewer prr WHERE prr.pullrequestid = insightly.pull_request.id) AS pr_reviewer_count",
         ]
         
         # Build WHERE clause
@@ -89,10 +92,27 @@ class DataFetcher:
         
         # Add date filters
         date_field = action_filters.get("date_field", "mergedon")
+        
+        # For shift actions, use source_month to filter data
+        if action in ["shift_open_prs", "shift_merged_prs"] and options.get("source_month"):
+            from datetime import datetime
+            source_month = options["source_month"]
+            # Parse source month (YYYY-MM format)
+            year, month = map(int, source_month.split("-"))
+            # Calculate start and end of source month
+            start_date = datetime(year, month, 1)
+            if month == 12:
+                end_date = datetime(year + 1, 1, 1)
+            else:
+                end_date = datetime(year, month + 1, 1)
+            params["start_date"] = start_date
+            params["end_date"] = end_date
+        else:
+            params["start_date"] = scope.start_date
+            params["end_date"] = scope.end_date
+        
         where_clauses.append(f"{date_field} >= :start_date")
         where_clauses.append(f"{date_field} < :end_date")
-        params["start_date"] = scope.start_date
-        params["end_date"] = scope.end_date
         
         # Build and execute query
         query = f"""
@@ -119,6 +139,7 @@ class DataFetcher:
         columns = [
             "id", "date", "type", "newwork", "rework",
             "maintenance", "assistance", "authorid", "repoid",
+            "(SELECT COUNT(*) FROM insightly.commit_files cf WHERE cf.commitid = insightly.commit.id) AS commit_files_count",
         ]
         
         where_clauses = ["organizationid = :org_id", "type = 'COMMIT'"]
@@ -132,10 +153,26 @@ class DataFetcher:
             where_clauses.append("authorid = ANY(:author_ids)")
             params["author_ids"] = scope.author_ids
         
+        # For shift actions, use source_month to filter data
+        if action == "shift_commit_dates" and options.get("source_month"):
+            from datetime import datetime
+            source_month = options["source_month"]
+            # Parse source month (YYYY-MM format)
+            year, month = map(int, source_month.split("-"))
+            # Calculate start and end of source month
+            start_date = datetime(year, month, 1)
+            if month == 12:
+                end_date = datetime(year + 1, 1, 1)
+            else:
+                end_date = datetime(year, month + 1, 1)
+            params["start_date"] = start_date
+            params["end_date"] = end_date
+        else:
+            params["start_date"] = scope.start_date
+            params["end_date"] = scope.end_date
+        
         where_clauses.append("date >= :start_date")
         where_clauses.append("date < :end_date")
-        params["start_date"] = scope.start_date
-        params["end_date"] = scope.end_date
         
         query = f"""
             SELECT {', '.join(columns)}
@@ -161,6 +198,13 @@ class DataFetcher:
             }
         
         elif action == "shift_open_prs":
+            selection_policy = options.get("selection_policy", "strict")
+            if selection_policy == "expanded":
+                return {
+                    "where": ["state IN ('OPEN', 'MERGED', 'DECLINED')"],
+                    "params": {},
+                    "date_field": "createdon",
+                }
             return {
                 "where": ["state = 'OPEN'"],
                 "params": {},
@@ -168,6 +212,13 @@ class DataFetcher:
             }
         
         elif action == "shift_merged_prs":
+            selection_policy = options.get("selection_policy", "strict")
+            if selection_policy == "expanded":
+                return {
+                    "where": ["mergedon IS NOT NULL"],
+                    "params": {},
+                    "date_field": "mergedon",
+                }
             return {
                 "where": ["state = 'MERGED'"],
                 "params": {},
