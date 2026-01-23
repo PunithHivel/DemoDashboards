@@ -293,7 +293,53 @@ if selected_metric:
 st.subheader("Step 3: Change request")
 options: Dict[str, Any] = {}
 show_summary = False
-if action in {"shift_open_prs", "shift_merged_prs", "shift_commit_dates"}:
+if action == "bulk_shift_months":
+    st.info("🔄 Bulk Month Shift: Move ALL data from multiple months forward or backward")
+    
+    # Month selection
+    month_options = build_month_options(start_date, end_date)
+    selected_months = st.multiselect(
+        "Select source months to shift",
+        options=month_options,
+        default=[],
+        help="All data in these months will be shifted"
+    )
+    options["source_months"] = selected_months
+    
+    # Offset selection
+    month_offset = st.number_input(
+        "Month offset",
+        min_value=-12,
+        max_value=12,
+        value=1,
+        step=1,
+        help="Positive = shift forward (Jan→Feb), Negative = shift backward (Feb→Jan)"
+    )
+    options["month_offset"] = month_offset
+    
+    # Show preview of what will happen
+    if selected_months and month_offset != 0:
+        st.write("**Preview of shift:**")
+        for source_month in selected_months:
+            year, month = map(int, source_month.split("-"))
+            target_month_num = month + month_offset
+            target_year = year
+            
+            # Handle year overflow/underflow
+            while target_month_num > 12:
+                target_month_num -= 12
+                target_year += 1
+            while target_month_num < 1:
+                target_month_num += 12
+                target_year -= 1
+            
+            target_month = f"{target_year}-{target_month_num:02d}"
+            st.write(f"  • {source_month} → {target_month}")
+        
+        st.warning(f"⚠️ This will shift ALL PRs, commits, and related data in {len(selected_months)} month(s)")
+    
+    show_summary = True
+elif action in {"shift_open_prs", "shift_merged_prs", "shift_commit_dates"}:
     options["source_month"] = st.text_input("Source month (YYYY-MM)")
     options["target_month"] = st.text_input("Target month (YYYY-MM)")
     options["count"] = st.number_input("Count", min_value=1, value=10, step=1)
