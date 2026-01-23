@@ -97,9 +97,11 @@ async def import_commit_files_from_csv(
         )
 
     inserted = _repository.bulk_insert(session, rows)
+    # bulk_insert now returns [{"inserted_count": N}] due to COPY optimization
+    inserted_count = inserted[0].get("inserted_count", 0) if inserted else 0
     return CommitFilesImportResponse(
         rows_received=len(df),
-        rows_inserted=len(inserted),
-        rows_skipped=len(df) - len(inserted),
+        rows_inserted=inserted_count,
+        rows_skipped=len(df) - len(rows),  # rows that failed validation
         commit_files=inserted,
     )

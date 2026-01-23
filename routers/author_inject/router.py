@@ -127,7 +127,8 @@ async def inject_authors_from_csv_stream(
                         "organizationid": organization_id,
                     }
                     
-                    inserted = _repository.bulk_insert(session, [row_data])
+                    # Use bulk_insert_with_encryption for single row with encryption support
+                    inserted = _repository.bulk_insert_with_encryption(session, [row_data])
                     
                     # Commit EACH row immediately so it shows in real-time
                     session.commit()
