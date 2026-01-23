@@ -8,8 +8,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 
-TARGET_ORG_ID = 2159
-
 TEMPLATE_QUERY = text(
     "SELECT * FROM insightly.repo ORDER BY id LIMIT 1"
 )
@@ -97,8 +95,19 @@ class RepoRepository:
             raise ValueError("Unable to locate a template repo row in the database.")
         return dict(result)
 
+    def check_table_and_list_repos(
+        self, session: Session, organization_id: int, workspace_id: int | None = None
+    ) -> tuple[bool, List[Dict]]:
+        """Check if repo table exists and return repos for the organization."""
+        try:
+            repos = self.list_repos(session, organization_id, workspace_id)
+            return True, repos
+        except Exception as e:
+            # Table doesn't exist or other error
+            return False, []
+
     def create_dummy_repos(
-        self, session: Session, workspace_id: int, count: int, organization_id: int = TARGET_ORG_ID
+        self, session: Session, workspace_id: int, count: int, organization_id: int, user_integration_id: int, owner: str
     ) -> List[Dict]:
         template = self._fetch_template(session)
         now = datetime.utcnow()
@@ -108,7 +117,7 @@ class RepoRepository:
             unique_suffix = uuid4().hex[:8]
             name = f"testing-repo-{unique_suffix}"
             slug = name.replace("_", "-")
-            httpurl = f"https://dummy.repo/{unique_suffix}"
+            httpurl = f"https://github.com/hiveldemo/{name}.git"
 
             exclusion_history = template.get("exclusion_history")
             if not exclusion_history:
@@ -124,7 +133,7 @@ class RepoRepository:
                 "is_private": template.get("is_private"),
                 "language": template.get("language"),
                 "main_branch": template.get("main_branch"),
-                "owner": template.get("owner"),
+                "owner": owner,
                 "project": template.get("project"),
                 "included": template.get("included", True),
                 "webhookpublished": template.get("webhookpublished", False),
@@ -140,7 +149,7 @@ class RepoRepository:
                 "repocloneattemptcount": template.get("repocloneattemptcount"),
                 "api_commit_date": template.get("api_commit_date"),
                 "excluded": template.get("excluded"),
-                "userintegrationid": template.get("userintegrationid"),
+                "userintegrationid": user_integration_id,
                 "repoaccess": template.get("repoaccess"),
                 "codereview_enabled": template.get("codereview_enabled"),
                 "codereview_enabled_on": template.get("codereview_enabled_on"),
