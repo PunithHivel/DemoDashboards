@@ -31,6 +31,26 @@ router = APIRouter(prefix="/pull-request-import", tags=["pull-request-import"])
 _repository = PullRequestRepository()
 
 
+@router.get(
+    "/check",
+    status_code=status.HTTP_200_OK,
+    summary="Check if pull_request table exists and count PRs for an organization",
+)
+def check_pull_request_table(
+    organization_id: int = Query(..., description="Organization ID"),
+    session: Session = Depends(get_db_session),
+):
+    table_exists, pr_count = _repository.check_table_and_count_by_org(
+        session, organization_id=organization_id
+    )
+    
+    return {
+        "table_exists": table_exists,
+        "organization_id": organization_id,
+        "pull_requests_count": pr_count,
+    }
+
+
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     alias_map = {
         "firstcommenttoapprovedduration": "firstcommenttoapproved",

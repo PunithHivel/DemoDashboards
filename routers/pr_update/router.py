@@ -100,9 +100,11 @@ async def import_pr_updates_from_csv(
         row["userintegrationid"] = user_integration_id
 
     inserted = _repository.bulk_insert(session, rows)
+    # bulk_insert now returns [{"inserted_count": N}] due to COPY optimization
+    inserted_count = inserted[0].get("inserted_count", 0) if inserted else 0
     return PrUpdateImportResponse(
         rows_received=len(df),
-        rows_inserted=len(inserted),
-        rows_skipped=len(df) - len(inserted),
+        rows_inserted=inserted_count,
+        rows_skipped=len(df) - len(rows),  # rows that failed validation
         pr_updates=inserted,
     )
