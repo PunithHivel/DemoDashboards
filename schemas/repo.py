@@ -20,6 +20,9 @@ class RepoListResponse(BaseModel):
 class RepoSeedRequest(BaseModel):
     count: int = Field(5, ge=1, le=50)
     workspace_id: int = Field(7172, ge=1)
+    organization_id: int = Field(..., ge=1, description="Organization ID")
+    user_integration_id: int = Field(..., ge=1, description="User Integration ID")
+    owner: str = Field(..., description="Repository owner name")
 
 
 class RepoSeedResponse(BaseModel):
