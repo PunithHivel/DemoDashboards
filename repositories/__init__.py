@@ -1,6 +1,5 @@
 """Repository layer for database operations."""
 
-from .bulk_copy import bulk_copy_insert, bulk_copy_upsert, bulk_copy_insert_returning_ids
 from .author_inject_repository import AuthorInjectRepository
 from .author_repository import AuthorRepository
 from .change_requests_repository import ChangeRequestsRepository
@@ -16,10 +15,6 @@ from .repo_repository import RepoRepository
 from .workspace_repository import WorkspaceRepository
 
 __all__ = [
-    # Bulk copy utilities
-    "bulk_copy_insert",
-    "bulk_copy_upsert",
-    "bulk_copy_insert_returning_ids",
     # Repositories
     "AuthorInjectRepository",
     "AuthorRepository",

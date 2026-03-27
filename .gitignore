@@ -9,3 +9,6 @@ data/
 
 # Metric info folder
 metric_info/
+
+# Local SQL scripts
+scripts/
