@@ -39,3 +39,7 @@ Do not hardcode AI provider scope in scripts.
 1. Discover providers for org.
 2. Choose matching skill.
 3. Generate data with provider-specific tables and shared mapping rules.
+4. Include companion tables where org has active usage:
+   - Copilot: `github_copilot_user_daily_usage` + `copilot_daily_summary` + `copilot_editor_usage` + `copilot_language_usage` + `copilot_seat_usage`
+   - Claude: `claude_code_report` + `claude_code_initial_sync` (and `claude_code_api_key` only if explicitly required)
+   - Cursor: `cursor_daily_usage` + `cursor_initial_sync` + `cursor_spending`

@@ -18,6 +18,8 @@ Generate Jira data so completion, throughput, and board/sprint analytics behave 
 ### Mapping / support tables
 - `insightly_jira.sprint_issue_mapping`
 - `insightly_jira.jira_sub_board`
+- `insightly_jira.issue_event_log`
+- `insightly_jira.issue_hierarchy`
 - `insightly.team_board_mapping`
 - `insightly.author` (Jira identities mapped via assignedauthorid)
 - `insightly.teamauthorrelation`
@@ -31,6 +33,9 @@ Generate Jira data so completion, throughput, and board/sprint analytics behave 
 - `board (1) -> (N) issue` via `issue.board_id`
 - `sprint (N) <-> (N) issue` via `sprint_issue_mapping`
 - `board (1) -> (N) jira_sub_board`
+- `issue (1) -> (N) issue_event_log` via `issue_event_log.issue_id`
+- `sprint (1) -> (N) issue_event_log` via `issue_event_log.sprint_id`
+- `issue (1) -> (N) issue_hierarchy` via `issue_hierarchy.issue_id`
 - `team (N) <-> (N) board` via `team_board_mapping`
 - `issue.assignee_id` must resolve to team author scope for team metrics
 
@@ -38,11 +43,13 @@ Generate Jira data so completion, throughput, and board/sprint analytics behave 
 - `COMPLETED_ISSUE_COUNT`: `issue` completion status/date logic
 - `COMPLETED_STORY_POINTS`: `issue.story_point` with same completion filter
 - Completion date logic typically uses `resolution_date`, fallback `status_change_date` for done/closed states
+- Sprint hygiene / timeline views also depend on `issue_event_log` and sprint mappings.
 
 ## 4) Dynamic Data Generation Rules
 1. **Generate board/sprint context first** (board -> sprint -> issue).
 2. **Populate both direct and mapping links**:
    - Keep `issue.board_id`, `issue.sprint_id`, and `sprint_issue_mapping` consistent.
+   - Keep `issue_event_log` consistent with issue/sprint/board ids.
 3. **Status timeline realism**:
    - Keep `jira_create_date <= status_change_date <= resolution_date` when resolved.
 4. **Team rollup consistency**:

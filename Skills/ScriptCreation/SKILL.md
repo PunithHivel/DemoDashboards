@@ -19,3 +19,15 @@ description: Enforce SQL script delivery for DemoDashboards. Use when creating o
    - `Section 2: Fix/Update`
    - `Section 3: Post-check/Verification`
    - add more only if strictly needed.
+8. Before finalizing SQL, perform a table coverage check against production for the target org:
+   - list base tables and related/child tables,
+   - verify where the org already has rows,
+   - include missing but required related tables in the script.
+9. For integration data scripts, do not stop at top-level tables:
+   - Git: include related PR/commit child tables when applicable.
+   - Jira: include board/sprint/mapping/event-log/hierarchy tables when applicable.
+   - AI: include provider summary/usage/sync companion tables when applicable.
+10. In each SQL file, add a brief `What it does` block that includes:
+   - table list touched,
+   - ID generation strategy (DB-generated vs script-generated),
+   - key table-to-table ID relations.
