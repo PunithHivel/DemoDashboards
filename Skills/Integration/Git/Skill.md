@@ -25,7 +25,10 @@ Generate production-like Git datasets so team/org metrics are computable from re
 ### Core fact tables (required)
 - `insightly.pull_request`
 - `insightly.commit`
-- `insightly.pr_reviewer` (if review-cycle level behavior is needed)
+- `insightly.commit_files`
+- `insightly.pr_reviewer`
+- `insightly.pr_comment`
+- `insightly.pr_update`
 
 ### Scope/mapping tables (required)
 - `insightly.author`
@@ -44,6 +47,11 @@ Generate production-like Git datasets so team/org metrics are computable from re
   - `deployment_record_id`
   - `mergetodeployduration`
 
+### PR/commit mapping support (environment dependent)
+- `insightly.pr_commit_relation`
+- `insightly.deployment_pull_requests`
+- Note: for org `6779`, current production baseline has `0` rows in both tables. Do not force insert there unless source pattern changes.
+
 ### Optional legacy aggregates (do not treat as primary source)
 - `insightly.authoraggregateddata`
 - `insightly.repoaggregateddata`
@@ -55,6 +63,10 @@ Generate production-like Git datasets so team/org metrics are computable from re
 - `author (1) -> (N) commit` via `commit.authorid`
 - `repo (1) -> (N) pull_request` and `repo (1) -> (N) commit` via `repoid`
 - `pull_request (1) -> (N) pr_reviewer`
+- `pull_request (1) -> (N) pr_comment`
+- `pull_request (1) -> (N) pr_update`
+- `commit (1) -> (N) commit_files`
+- `pull_request (N) <-> (N) commit` through `pr_commit_relation` (if used in that org/environment)
 - Provider identities map via `author.assignedauthorid` to source Git author where applicable.
 
 ## 3) Metric Dependency Map (Git)
@@ -79,6 +91,13 @@ Generate production-like Git datasets so team/org metrics are computable from re
 - `COMMITS`: `commit.type='COMMIT`
 - `COMMIT_FREQUENCY`: commits per period/team-author scope
 - `NEW_WORK / REWORK / MAINTENANCE`: commit split fields
+- `ACTIVE_DAYS`: union of commit dates + PR lifecycle dates + `pr_update.date` activity dates
+
+### Service query dependency notes (insightly-svc)
+- Review-count style metrics use `pr_reviewer` with `approved=true` and `approveddate` filters; keep only one approved reviewer row per reviewed PR unless intentionally testing multiple approvals.
+- Activity timelines and active days depend on `pr_update`; if adding multiple update rows per PR, keep them on realistic timestamps and avoid invalid ordering.
+- `pr_comment` is used in PR detail/comment flows and should align by `pullrequestid`, `organizationid`, `authorid`.
+- `pr_commit_relation` is used in report/detail joins in svc, but not all orgs populate it.
 
 ## 4) Dynamic Generation Rules (Not Hard-Scoped)
 1. Resolve scope dynamically:
@@ -94,9 +113,13 @@ Generate production-like Git datasets so team/org metrics are computable from re
    - `hotfixpr=true` only for release-eligible PRs
 5. Deploy/lead-time readiness:
    - if generating delivery metrics, ensure deployment linkage fields are populated consistently.
-6. Time realism:
+6. PR mapping realism:
+   - do not assume 1:1 row counts (`PR count == reviewer/comment/update rows`).
+   - generate deterministic multi-row distributions for `pr_reviewer` / `pr_comment` / `pr_update` when realism is required.
+   - keep metric-safe behavior: extra reviewer rows should generally be `approved=false` to avoid inflating reviewed-PR counts.
+7. Time realism:
    - keep timestamp order plausible (`first commit <= open <= review <= approval <= merge <= deploy`).
-7. Idempotency:
+8. Idempotency:
    - upsert by stable keys (`organizationid + external ids + date/period`), no duplicate facts.
 
 ## 5) Script Blueprint (Mandatory)

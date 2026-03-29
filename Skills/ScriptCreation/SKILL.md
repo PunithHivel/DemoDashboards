@@ -43,6 +43,13 @@ description: Enforce SQL script delivery for DemoDashboards. Use when creating o
    - issue-type split with counts/percentages,
    - monthly counts at minimum: commits, PRs, issues, and PR-commit assumption,
    - monthly timing targets at minimum: coding/review/merge/deploy time.
+12. For Git mapping tables, do not default to 1:1 cardinality:
+   - `pr_reviewer`, `pr_comment`, and `pr_update` can have multiple rows per PR.
+   - Prefer deterministic per-team/per-month distributions when realism is required.
+   - Keep metric-safe behavior (e.g., extra reviewer rows should usually be non-approved).
+13. Before adding `pr_commit_relation` or `deployment_pull_requests`, confirm org-specific baseline:
+   - if baseline is zero and service metrics do not require them for that scope, keep them unchanged.
+   - only insert when source-model parity explicitly requires it.
 
 ## End Criteria
 - SQL sections are complete and ordered.
