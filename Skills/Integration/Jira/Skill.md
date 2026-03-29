@@ -8,6 +8,12 @@ description: Generate or maintain Jira integration data workflows for DemoDashbo
 ## Objective
 Generate Jira data so completion, throughput, and board/sprint analytics behave exactly like production joins.
 
+## Read Before You Start
+1. `Skills/Playbook/SKILL.md`
+2. `Skills/ScriptCreation/SKILL.md`
+3. `metric_info/jira`
+4. current target CSV (if CSV-driven request)
+
 ## 1) Table Inventory
 
 ### Primary fact tables
@@ -63,3 +69,13 @@ Generate Jira data so completion, throughput, and board/sprint analytics behave 
 - Section 1: Validation (board/sprint/issue integrity)
 - Section 2: Insert/Update (issues + mappings)
 - Section 3: Post-check (completed issues/story points by month/team)
+- In script header (`What it does`), always state:
+  - board/sub-board names used,
+  - epic strategy (`is_epic`/`epic_id` behavior),
+  - issue-type split and monthly issue counts.
+
+## End Checklist
+- board/sub-board/sprint context created or reused.
+- issue rows linked to board/sprint consistently.
+- sprint_issue_mapping and issue_event_log aligned to issue/sprint ids.
+- hierarchy handling is explicit (created or intentionally omitted with reason).

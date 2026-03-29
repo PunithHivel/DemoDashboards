@@ -8,6 +8,12 @@ description: Generate or maintain Git integration data workflows for DemoDashboa
 ## Objective
 Generate production-like Git datasets so team/org metrics are computable from real relational paths (author -> team -> repo -> PR/commit) with no broken joins.
 
+## Read Before You Start
+1. `Skills/Playbook/SKILL.md`
+2. `Skills/ScriptCreation/SKILL.md`
+3. `metric_info/Git`
+4. current target CSV (if CSV-driven request)
+
 ## What This Skill Must Guarantee
 - Data is created across **all dependent tables**, not just top-level facts.
 - Team rollups work without manual patching.
@@ -114,3 +120,9 @@ Generate production-like Git datasets so team/org metrics are computable from re
 2. Denominator exists but metric null -> check mapping/flag columns.
 3. Deployment metrics null -> check `deployment_record_id` + `is_deployment_pr` + `mergetodeployduration`.
 4. Reviewer metrics off -> check `reviewbranchpr`, `approvedon`, `pr_reviewer` consistency.
+
+## End Checklist
+- PR/commit parent-child links verified.
+- team-author-org scope verified.
+- denominator coverage verified for hotfix/review/release/deploy metrics.
+- post-check query output documented.

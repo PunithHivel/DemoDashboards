@@ -5,6 +5,12 @@ description: Enforce SQL script delivery for DemoDashboards. Use when creating o
 
 # DemoDashboards Script Skill
 
+## Start Sequence (Read First)
+1. `Skills/Playbook/SKILL.md`
+2. `Skills/DataCreation/SKILL.md`
+3. Relevant integration skill(s) in `Skills/Integration/*/SKILL.md`
+4. Target CSV or metric definition files for the request scope
+
 1. Confirm the task is a SQL script change for this repository.
 2. Create exactly one SQL file for the request by default.
 3. Do not split into multiple SQL files unless explicitly requested.
@@ -31,3 +37,16 @@ description: Enforce SQL script delivery for DemoDashboards. Use when creating o
    - table list touched,
    - ID generation strategy (DB-generated vs script-generated),
    - key table-to-table ID relations.
+11. For Qx data-generation scripts, `What it does` must also include explicit payload details:
+   - board/sub-board naming pattern and ID strategy,
+   - epic strategy (`epic_id` populated or intentionally NULL),
+   - issue-type split with counts/percentages,
+   - monthly counts at minimum: commits, PRs, issues, and PR-commit assumption,
+   - monthly timing targets at minimum: coding/review/merge/deploy time.
+
+## End Criteria
+- SQL sections are complete and ordered.
+- Required related tables are included (no top-level-only scripts).
+- ID linkages are explicit and consistent across parent/child tables.
+- Validation SQL exists and is runnable.
+- Handoff report is updated with assumptions and caveats.

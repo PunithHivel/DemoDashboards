@@ -8,6 +8,12 @@ description: Generate or maintain DORA integration data workflows for DemoDashbo
 ## Objective
 Generate DORA-compatible deployment and incident recovery data that aligns with Git activity and team scope.
 
+## Read Before You Start
+1. `Skills/Playbook/SKILL.md`
+2. `Skills/ScriptCreation/SKILL.md`
+3. `Skills/Integration/Git/SKILL.md` (for deployment-linked PR consistency)
+4. target CSV/metric expectations
+
 ## 1) Table Inventory
 
 ### Primary fact tables
@@ -46,3 +52,9 @@ Generate DORA-compatible deployment and incident recovery data that aligns with 
 - Section 1: Validation (deployment/change coverage)
 - Section 2: Insert/Update (deployment + change records)
 - Section 3: Post-check (DORA DF/CFR/MTTR by month/team)
+
+## End Checklist
+- deployment and incident windows match period boundaries.
+- team_id + authorid mappings are valid.
+- CFR denominator (deployments) is non-zero when CFR expected.
+- MTTR durations are realistic and documented.

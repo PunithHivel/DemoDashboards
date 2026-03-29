@@ -8,6 +8,12 @@ description: Central AI integration index for DemoDashboards. Use when selecting
 ## Purpose
 Central index for AI integration data-generation skills.
 
+## Read Before You Start
+1. `Skills/Playbook/SKILL.md`
+2. `Skills/ScriptCreation/SKILL.md`
+3. target CSV/metric expectations
+4. org provider discovery from `user_integration_details`
+
 ## Provider discovery rule (always run first)
 Use `insightly.user_integration_details` to discover active providers dynamically for the target org.
 
@@ -43,3 +49,9 @@ Do not hardcode AI provider scope in scripts.
    - Copilot: `github_copilot_user_daily_usage` + `copilot_daily_summary` + `copilot_editor_usage` + `copilot_language_usage` + `copilot_seat_usage`
    - Claude: `claude_code_report` + `claude_code_initial_sync` (and `claude_code_api_key` only if explicitly required)
    - Cursor: `cursor_daily_usage` + `cursor_initial_sync` + `cursor_spending`
+
+## End Checklist
+- provider integration ids resolved and used consistently.
+- user-level and summary/companion tables both covered where required.
+- author mapping is explicit (source author vs provider-specific identity rules).
+- post-check confirms expected monthly active users and usage totals.
