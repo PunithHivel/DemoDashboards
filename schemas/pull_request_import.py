@@ -8,7 +8,6 @@ class PullRequestImportResponse(BaseModel):
 
 
 EXPECTED_COLUMNS = [
-    "id",
     "organizationid",
     "workspaceid",
     "actualpullrequestid",
@@ -86,12 +85,10 @@ EXPECTED_COLUMNS = [
 ]
 
 REQUIRED_COLUMNS = {
-    "id",
     "actualpullrequestid",
     "authorid",
     "createdon",
     "repoid",
-    "organizationid",
     "workspaceid",
 }
 
@@ -123,8 +120,6 @@ FLOAT_COLUMNS = {
 }
 
 INT_COLUMNS = {
-    "id",
-    "organizationid",
     "workspaceid",
     "actualpullrequestid",
     "authorid",
@@ -143,7 +138,6 @@ INT_COLUMNS = {
     "originalapprovedby",
     "originalfirstreviewedby",
     "originaldeclinedby",
-    "userintegrationid",
     "reviewcyclecount",
     "estimated_storypoints",
     "comment_sentiment_count",

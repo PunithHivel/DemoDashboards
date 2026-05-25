@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from .bulk_copy import bulk_copy_upsert
 
 COMMIT_COLUMNS = [
     "hash",
@@ -41,92 +42,30 @@ COMMIT_COLUMNS = [
     "is_auto_excluded",
 ]
 
-COMMIT_INSERT_SQL = text(
-    """
-    INSERT INTO insightly.commit (
-        hash,
-        authorid,
-        commitid,
-        type,
-        date,
-        skippedregexfiles,
-        missingcommit,
-        message,
-        repoid,
-        createddate,
-        modifieddate,
-        repositoryuuid,
-        repositoryfullname,
-        htmllink,
-        rework,
-        newwork,
-        maintenance,
-        assistance,
-        linesadded,
-        linesremoved,
-        originalauthorid,
-        processed,
-        skipfromcalculation,
-        branch,
-        jiramappingprocessed,
-        organizationid,
-        workspaceid,
-        codingfilter,
-        userintegrationid,
-        jiradatacollected,
-        estimated_storypoints,
-        remark,
-        is_auto_excluded
-    ) VALUES (
-        :hash,
-        :authorid,
-        :commitid,
-        :type,
-        :date,
-        :skippedregexfiles,
-        :missingcommit,
-        :message,
-        :repoid,
-        :createddate,
-        :modifieddate,
-        :repositoryuuid,
-        :repositoryfullname,
-        :htmllink,
-        :rework,
-        :newwork,
-        :maintenance,
-        :assistance,
-        :linesadded,
-        :linesremoved,
-        :originalauthorid,
-        :processed,
-        :skipfromcalculation,
-        :branch,
-        :jiramappingprocessed,
-        :organizationid,
-        :workspaceid,
-        :codingfilter,
-        :userintegrationid,
-        :jiradatacollected,
-        :estimated_storypoints,
-        :remark,
-        :is_auto_excluded
-    )
-    RETURNING id, hash, repoid, organizationid
-    """
-)
+# Columns that form the unique constraint
+COMMIT_CONFLICT_COLUMNS = ["hash", "repoid", "organizationid"]
 
 
 class CommitRepository:
-    """Handles commit table inserts."""
+    """Handles commit table inserts using high-performance COPY."""
 
     def bulk_insert(self, session: Session, rows: List[Dict]) -> List[Dict]:
+        """
+        Bulk insert/upsert commits using PostgreSQL COPY command.
+        
+        Uses temp table + COPY + INSERT ON CONFLICT for maximum performance.
+        Returns summary of inserted rows (not individual IDs due to COPY limitations).
+        """
         if not rows:
             return []
 
-        inserted: List[Dict] = []
-        for row in rows:
-            result = session.execute(COMMIT_INSERT_SQL, row)
-            inserted.append(dict(result.mappings().one()))
-
-        return inserted
+        count = bulk_copy_upsert(
+            session=session,
+            table_name="commit",
+            columns=COMMIT_COLUMNS,
+            rows=rows,
+            conflict_columns=COMMIT_CONFLICT_COLUMNS,
+        )
+        
+        # Return summary since COPY doesn't support RETURNING
+        return [{"inserted_count": count}]

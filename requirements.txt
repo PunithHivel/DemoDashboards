@@ -5,3 +5,10 @@ sqlalchemy
 psycopg2-binary
 python-multipart
 python-dotenv
+requests
+streamlit
+watchdog
+openai
+jinja2
+openai>=1.0.0
+jinja2

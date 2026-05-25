@@ -22,7 +22,7 @@ AUTHOR_INSERT_SQL = text(
         scmprovider,
         active
     ) VALUES (
-        :id,
+        COALESCE(:id, nextval('insightly.author_id_seq'::regclass)),
         :organizationid,
         :accountid,
         aes_encrypt(:name),

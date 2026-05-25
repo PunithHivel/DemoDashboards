@@ -2,3 +2,13 @@
 __pycache__/
 *.pyc
 .venv/
+
+# Data files
+data/
+*.csv
+
+# Metric info folder
+metric_info/
+
+# Local SQL scripts
+scripts/

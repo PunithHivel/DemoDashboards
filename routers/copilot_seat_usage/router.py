@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from typing import Set
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
+
+from db.session import get_db_session
+from repositories.copilot_seat_usage_repository import (
+    COPILOT_SEAT_USAGE_COLUMNS,
+    CopilotSeatUsageRepository,
+)
+from routers._csv_import_helpers import prepare_rows
+from schemas.ai_import import GenericImportResponse
+from utils.csv_loader import read_uploaded_csv
+
+router = APIRouter(prefix="/copilot-seat-usage", tags=["copilot-seat-usage"])
+_repository = CopilotSeatUsageRepository()
+
+REQUIRED_FIELDS: Set[str] = {"organizationid", "workspaceid", "date", "assignee_id"}
+INT_FIELDS: Set[str] = {"organizationid", "workspaceid", "assignee_id"}
+DATETIME_FIELDS: Set[str] = {
+    "date",
+    "last_activity_at",
+    "created_at",
+    "updated_at",
+    "pending_cancellation_date",
+}
+ALIASES = {
+    "state": "plan_type",
+    "last_activity_date": "last_activity_at",
+}
+
+
+@router.post(
+    "/csv",
+    status_code=status.HTTP_201_CREATED,
+    summary="Import copilot_seat_usage from CSV",
+    response_model=GenericImportResponse,
+)
+async def import_csv(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_db_session),
+) -> GenericImportResponse:
+    df = await read_uploaded_csv(file)
+
+    rows = prepare_rows(
+        df,
+        columns=COPILOT_SEAT_USAGE_COLUMNS,
+        required_fields=REQUIRED_FIELDS,
+        int_fields=INT_FIELDS,
+        datetime_fields=DATETIME_FIELDS,
+        aliases=ALIASES,
+    )
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid rows found in CSV.")
+
+    inserted = _repository.bulk_insert(session, rows)
+    inserted_count = inserted[0].get("inserted_count", 0) if inserted else 0
+    return GenericImportResponse(
+        rows_received=len(df),
+        rows_inserted=inserted_count,
+        rows_skipped=len(df) - len(rows),
+    )
