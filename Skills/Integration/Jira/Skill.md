@@ -26,6 +26,7 @@ Generate Jira data so completion, throughput, and board/sprint analytics behave 
 - `insightly_jira.jira_sub_board`
 - `insightly_jira.issue_event_log`
 - `insightly_jira.issue_hierarchy`
+- `insightly.jira_issue_git_activity_mapping`
 - `insightly.team_board_mapping`
 - `insightly.author` (Jira identities mapped via assignedauthorid)
 - `insightly.teamauthorrelation`
@@ -42,6 +43,7 @@ Generate Jira data so completion, throughput, and board/sprint analytics behave 
 - `issue (1) -> (N) issue_event_log` via `issue_event_log.issue_id`
 - `sprint (1) -> (N) issue_event_log` via `issue_event_log.sprint_id`
 - `issue (1) -> (N) issue_hierarchy` via `issue_hierarchy.issue_id`
+- `issue (1) -> (N) jira_issue_git_activity_mapping` via `jira_issue_git_activity_mapping.issue_id`
 - `team (N) <-> (N) board` via `team_board_mapping`
 - `issue.assignee_id` must resolve to team author scope for team metrics
 
@@ -53,9 +55,13 @@ Generate Jira data so completion, throughput, and board/sprint analytics behave 
 
 ## 4) Dynamic Data Generation Rules
 1. **Generate board/sprint context first** (board -> sprint -> issue).
+   - If request says *no new board/sub-board*, reuse existing team board/sub-board (do not insert into `board`/`jira_sub_board`).
 2. **Populate both direct and mapping links**:
    - Keep `issue.board_id`, `issue.sprint_id`, and `sprint_issue_mapping` consistent.
    - Keep `issue_event_log` consistent with issue/sprint/board ids.
+   - Populate `jira_issue_git_activity_mapping` when Jira↔Git activity correlation is required:
+     - `activity_type` values follow existing pattern (`COMMIT`, `PULLREQUEST`, `MERGE_COMMIT`).
+     - `activity_id` should reference existing Git activity rows for the same org/team/time window.
 3. **Status timeline realism**:
    - Keep `jira_create_date <= status_change_date <= resolution_date` when resolved.
 4. **Team rollup consistency**:

@@ -50,6 +50,9 @@ description: Enforce SQL script delivery for DemoDashboards. Use when creating o
 13. Before adding `pr_commit_relation` or `deployment_pull_requests`, confirm org-specific baseline:
    - if baseline is zero and service metrics do not require them for that scope, keep them unchanged.
    - only insert when source-model parity explicitly requires it.
+14. For generated Git textual fields:
+   - use realistic deterministic templates for `commit.message` and `pr_comment.text`.
+   - avoid static placeholders like repeated `Q126...` text across all rows.
 
 ## End Criteria
 - SQL sections are complete and ordered.

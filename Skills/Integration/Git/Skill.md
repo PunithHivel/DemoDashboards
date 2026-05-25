@@ -119,6 +119,7 @@ Generate production-like Git datasets so team/org metrics are computable from re
    - keep metric-safe behavior: extra reviewer rows should generally be `approved=false` to avoid inflating reviewed-PR counts.
 7. Time realism:
    - keep timestamp order plausible (`first commit <= open <= review <= approval <= merge <= deploy`).
+   - keep textual fields realistic and deterministic (e.g., commit message and PR comment templates), avoid placeholder-only text.
 8. Idempotency:
    - upsert by stable keys (`organizationid + external ids + date/period`), no duplicate facts.
 

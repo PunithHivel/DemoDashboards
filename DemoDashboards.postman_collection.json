@@ -69,97 +69,688 @@
       }
     },
     {
-      "name": "Author Import - Upload CSV",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "body": {
-          "mode": "formdata",
-          "formdata": [
-            {
-              "key": "organization_id",
-              "value": "2159",
-              "type": "text",
-              "description": "Organization that the uploaded authors belong to."
+      "name": "CSV Upload Endpoints",
+      "item": [
+        {
+          "name": "Author Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/author-import/csv",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "author-import",
+                "csv"
+              ]
             },
-            {
-              "key": "file",
-              "type": "file",
-              "src": "/path/to/authors.csv",
-              "description": "CSV file containing author rows."
+            "description": "Upload authors CSV (multipart form-data).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "organization_id",
+                  "value": "6779",
+                  "type": "text",
+                  "description": "Organization ID"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/authors.csv",
+                  "description": "Author CSV file"
+                }
+              ]
             }
-          ]
+          }
         },
-        "url": {
-          "raw": "{{base_url}}/author-import/csv",
-          "host": [
-            "{{base_url}}"
-          ],
-          "path": [
-            "author-import",
-            "csv"
-          ]
-        },
-        "description": "Uploads an author CSV via multipart form data. The `file` part must be a CSV."
-      }
-    },
-    {
-      "name": "Commit Import - Upload CSV",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "body": {
-          "mode": "formdata",
-          "formdata": [
-            {
-              "key": "file",
-              "type": "file",
-              "src": "/path/to/commits.csv",
-              "description": "CSV containing commit records."
+        {
+          "name": "Author Inject - Stream CSV Upload",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/author-inject/csv/upload/stream",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "author-inject",
+                "csv",
+                "upload",
+                "stream"
+              ]
+            },
+            "description": "Stream-insert authors from CSV. Returns NDJSON/SSE chunks.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "organization_id",
+                  "value": "6779",
+                  "type": "text",
+                  "description": "Organization ID"
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional row limit"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/authors.csv",
+                  "description": "Author CSV file"
+                }
+              ]
             }
-          ]
+          }
         },
-        "url": {
-          "raw": "{{base_url}}/commit/csv",
-          "host": [
-            "{{base_url}}"
-          ],
-          "path": [
-            "commit",
-            "csv"
-          ]
-        },
-        "description": "Uploads commits via CSV (multipart form data with `file`)."
-      }
-    },
-    {
-      "name": "Pull Request Import - Upload CSV",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "body": {
-          "mode": "formdata",
-          "formdata": [
-            {
-              "key": "file",
-              "type": "file",
-              "src": "/path/to/pull_requests.csv",
-              "description": "CSV containing pull request rows."
+        {
+          "name": "Commit Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/commit/csv?organization_id=6779&workspace_id=11816&user_integration_id=8000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "commit",
+                "csv"
+              ],
+              "query": [
+                {
+                  "key": "organization_id",
+                  "value": "6779"
+                },
+                {
+                  "key": "workspace_id",
+                  "value": "11816"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8000"
+                }
+              ]
+            },
+            "description": "Upload commit CSV; org/workspace/user integration are query params.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/commit.csv",
+                  "description": "Commit CSV file"
+                }
+              ]
             }
-          ]
+          }
         },
-        "url": {
-          "raw": "{{base_url}}/pull-request-import/csv",
-          "host": [
-            "{{base_url}}"
-          ],
-          "path": [
-            "pull-request-import",
-            "csv"
-          ]
+        {
+          "name": "Pull Request Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/pull-request-import/csv?organization_id=6779&user_integration_id=8000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "pull-request-import",
+                "csv"
+              ],
+              "query": [
+                {
+                  "key": "organization_id",
+                  "value": "6779"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8000"
+                }
+              ]
+            },
+            "description": "Upload pull request CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/pull_request.csv",
+                  "description": "Pull request CSV file"
+                }
+              ]
+            }
+          }
         },
-        "description": "Uploads pull requests via CSV (multipart form data with `file`)."
-      }
+        {
+          "name": "PR Reviewer Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/pr-reviewer/csv?organization_id=6779&user_integration_id=8000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "pr-reviewer",
+                "csv"
+              ],
+              "query": [
+                {
+                  "key": "organization_id",
+                  "value": "6779"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8000"
+                }
+              ]
+            },
+            "description": "Upload PR reviewer CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/pr_reviewer.csv",
+                  "description": "PR reviewer CSV file"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PR Comment Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/pr-comment/csv?organization_id=6779&user_integration_id=8000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "pr-comment",
+                "csv"
+              ],
+              "query": [
+                {
+                  "key": "organization_id",
+                  "value": "6779"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8000"
+                }
+              ]
+            },
+            "description": "Upload PR comment CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/pr_comment.csv",
+                  "description": "PR comment CSV file"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PR Update Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/pr-update/csv?organization_id=6779&user_integration_id=8000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "pr-update",
+                "csv"
+              ],
+              "query": [
+                {
+                  "key": "organization_id",
+                  "value": "6779"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8000"
+                }
+              ]
+            },
+            "description": "Upload PR update CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/pr_update.csv",
+                  "description": "PR update CSV file"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Commit Files Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/commit-files/csv",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "commit-files",
+                "csv"
+              ]
+            },
+            "description": "Upload commit files CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/commit_files.csv",
+                  "description": "Commit files CSV file"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Deployment Frequency Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/deployment-frequency/csv?organization_id=6779&user_integration_id=8000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "deployment-frequency",
+                "csv"
+              ],
+              "query": [
+                {
+                  "key": "organization_id",
+                  "value": "6779"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8000"
+                }
+              ]
+            },
+            "description": "Upload deployment frequency CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/deployment_frequency.csv",
+                  "description": "Deployment frequency CSV file"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Change Requests Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/change-requests/csv?organization_id=6779",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "change-requests",
+                "csv"
+              ],
+              "query": [
+                {
+                  "key": "organization_id",
+                  "value": "6779"
+                }
+              ]
+            },
+            "description": "Upload change requests CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/change_requests.csv",
+                  "description": "Change requests CSV file"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira Board Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/board",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "board"
+              ]
+            },
+            "description": "Upload Jira board CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8002",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/board.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira Sub Board Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/jira-sub-board",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "jira-sub-board"
+              ]
+            },
+            "description": "Upload Jira sub-board CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8002",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/jira_sub_board.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira Sprint Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/sprint",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "sprint"
+              ]
+            },
+            "description": "Upload Jira sprint CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8002",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/sprint.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira Issue Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/issue",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "issue"
+              ]
+            },
+            "description": "Upload Jira issue CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8002",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/issue.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira Sprint-Issue Mapping Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/sprint-issue-mapping",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "sprint-issue-mapping"
+              ]
+            },
+            "description": "Upload sprint-issue mapping CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8002",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/sprint_issue_mapping.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira Team-Board Mapping Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/team-board-mapping",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "team-board-mapping"
+              ]
+            },
+            "description": "Upload team-board mapping CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8002",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/team_board_mapping.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira Issue Event Log Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/issue-event-log",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "issue-event-log"
+              ]
+            },
+            "description": "Upload issue event log CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "user_integration_id",
+                  "value": "8002",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/issue_event_log.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Jira-Git Mapping Import - Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jira-import/jira-git-mapping",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jira-import",
+                "jira-git-mapping"
+              ]
+            },
+            "description": "Upload Jira-Git activity mapping CSV.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "org_id",
+                  "value": "6779",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/jira_issue_git_activity_mapping.csv"
+                }
+              ]
+            }
+          }
+        }
+      ]
     }
   ],
   "variable": [

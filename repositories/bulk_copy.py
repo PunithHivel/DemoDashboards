@@ -8,8 +8,24 @@ by using PostgreSQL's native COPY command.
 from typing import List, Dict, Any
 from io import StringIO
 import csv
+import json
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+
+
+def _to_copy_text(value: Any) -> str:
+    """
+    Convert Python values to a text representation suitable for PostgreSQL COPY.
+
+    Key detail: JSON/JSONB columns must receive valid JSON text. If upstream code parsed
+    JSON fields into Python dict/list, using str(value) would produce single quotes which
+    PostgreSQL rejects (e.g. "[{'k': 'v'}]").
+    """
+    if value is None:
+        return "\\N"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(",", ":"))
+    return str(value)
 
 
 def bulk_copy_insert_jira(
@@ -52,11 +68,7 @@ def bulk_copy_insert_jira(
     
     # Write rows (no header)
     for row in rows:
-        # Convert None to \N (PostgreSQL NULL representation in COPY)
-        processed_row = {
-            col: '\\N' if row.get(col) is None else str(row.get(col, ''))
-            for col in columns
-        }
+        processed_row = {col: _to_copy_text(row.get(col, "")) for col in columns}
         writer.writerow(processed_row)
     
     # Get the CSV content
@@ -126,11 +138,7 @@ def bulk_copy_insert(
     
     # Write rows (no header)
     for row in rows:
-        # Convert None to \N (PostgreSQL NULL representation in COPY)
-        processed_row = {
-            col: '\\N' if row.get(col) is None else str(row.get(col, ''))
-            for col in columns
-        }
+        processed_row = {col: _to_copy_text(row.get(col, "")) for col in columns}
         writer.writerow(processed_row)
     
     # Get the CSV content
@@ -213,10 +221,7 @@ def bulk_copy_upsert(
         )
         
         for row in rows:
-            processed_row = {
-                col: '\\N' if row.get(col) is None else str(row.get(col, ''))
-                for col in columns
-            }
+            processed_row = {col: _to_copy_text(row.get(col, "")) for col in columns}
             writer.writerow(processed_row)
         
         output.seek(0)
