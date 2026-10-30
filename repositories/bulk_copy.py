@@ -13,6 +13,25 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 
+# Merging accounts no longer rewrites fact rows (HV-27 author_cluster): these legacy "pre-merge" columns stay NULL
+# on every imported row, even when an old export file still carries values for them.
+LEGACY_ORIGINAL_AUTHOR_COLUMNS = frozenset({
+    "originalauthorid",
+    "originalmergedby",
+    "originalapprovedby",
+    "originalfirstreviewedby",
+    "originaldeclinedby",
+})
+
+
+def _row_to_copy_text(row: Dict[str, Any], columns: List[str]) -> Dict[str, str]:
+    """One row as COPY text, with the legacy original-author columns forced to NULL."""
+    return {
+        col: "\\N" if col in LEGACY_ORIGINAL_AUTHOR_COLUMNS else _to_copy_text(row.get(col, ""))
+        for col in columns
+    }
+
+
 def _to_copy_text(value: Any) -> str:
     """
     Convert Python values to a text representation suitable for PostgreSQL COPY.
@@ -68,7 +87,7 @@ def bulk_copy_insert_jira(
     
     # Write rows (no header)
     for row in rows:
-        processed_row = {col: _to_copy_text(row.get(col, "")) for col in columns}
+        processed_row = _row_to_copy_text(row, columns)
         writer.writerow(processed_row)
     
     # Get the CSV content
@@ -138,7 +157,7 @@ def bulk_copy_insert(
     
     # Write rows (no header)
     for row in rows:
-        processed_row = {col: _to_copy_text(row.get(col, "")) for col in columns}
+        processed_row = _row_to_copy_text(row, columns)
         writer.writerow(processed_row)
     
     # Get the CSV content
@@ -221,7 +240,7 @@ def bulk_copy_upsert(
         )
         
         for row in rows:
-            processed_row = {col: _to_copy_text(row.get(col, "")) for col in columns}
+            processed_row = _row_to_copy_text(row, columns)
             writer.writerow(processed_row)
         
         output.seek(0)
@@ -309,7 +328,7 @@ def bulk_copy_insert_returning_ids(
         
         for row in rows:
             processed_row = {
-                col: '\\N' if row.get(col) is None else str(row.get(col, ''))
+                col: '\\N' if col in LEGACY_ORIGINAL_AUTHOR_COLUMNS or row.get(col) is None else str(row.get(col, ''))
                 for col in columns
             }
             writer.writerow(processed_row)
