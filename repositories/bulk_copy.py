@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 
-# Merging accounts no longer rewrites fact rows (HV-27 author_cluster): these legacy "pre-merge" columns stay NULL
+# Merging accounts no longer rewrites fact rows (HV-27 author.assignedauthorid): these legacy "pre-merge" columns stay NULL
 # on every imported row, even when an old export file still carries values for them.
 LEGACY_ORIGINAL_AUTHOR_COLUMNS = frozenset({
     "originalauthorid",
